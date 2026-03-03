@@ -1,4 +1,5 @@
 import { ref, reactive } from 'vue'
+import { ApiError } from '@/services/api'
 
 export interface Notification {
   id: string
@@ -63,7 +64,11 @@ export function useNotifications() {
 
   // Handle API errors
   const handleApiError = (error: any) => {
-    console.error('API Error:', error)
+    // Handle ApiError directly
+    if (error instanceof ApiError) {
+      showError(error.message)
+      return
+    }
     
     // Handle different error formats
     if (error?.detail?.message) {

@@ -6,7 +6,7 @@ export interface ValidationRule {
   minLength?: number
   maxLength?: number
   pattern?: RegExp
-  custom?: (value: string) => string | null
+  custom?: (value: unknown) => string | null
 }
 
 export interface ValidationRules {
@@ -26,40 +26,44 @@ export function useFormValidation<T extends Record<string, any>>(
   const touched = ref<Record<string, boolean>>({})
   const submitted = ref(false)
 
-  const validateField = (field: keyof T, value: string): string | null => {
+  const validateField = (field: keyof T, value: unknown): string | null => {
     const fieldRules = rules[field as string]
     if (!fieldRules) return null
 
+    // Type guard pour vérifier si c'est une string
+    const isStringValue = typeof value === 'string'
+    const stringValue = isStringValue ? value : ''
+    
     // Required validation
-    if (fieldRules.required && (!value || value.trim() === '')) {
+    if (fieldRules.required && (!value || (isStringValue && stringValue.trim() === ''))) {
       return 'Ce champ est obligatoire'
     }
 
     // Skip other validations if field is empty and not required
-    if (!value || value.trim() === '') {
+    if (!value || (isStringValue && stringValue.trim() === '')) {
       return null
     }
 
-    // Email validation
-    if (fieldRules.email) {
+    // Email validation (uniquement pour les strings)
+    if (fieldRules.email && isStringValue) {
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-      if (!emailRegex.test(value)) {
+      if (!emailRegex.test(stringValue)) {
         return 'Veuillez entrer une adresse email valide'
       }
     }
 
-    // Min length validation
-    if (fieldRules.minLength && value.length < fieldRules.minLength) {
+    // Min length validation (uniquement pour les strings)
+    if (fieldRules.minLength && isStringValue && stringValue.length < fieldRules.minLength) {
       return `Ce champ doit contenir au moins ${fieldRules.minLength} caractères`
     }
 
-    // Max length validation
-    if (fieldRules.maxLength && value.length > fieldRules.maxLength) {
+    // Max length validation (uniquement pour les strings)
+    if (fieldRules.maxLength && isStringValue && stringValue.length > fieldRules.maxLength) {
       return `Ce champ ne peut pas dépasser ${fieldRules.maxLength} caractères`
     }
 
-    // Pattern validation
-    if (fieldRules.pattern && !fieldRules.pattern.test(value)) {
+    // Pattern validation (uniquement pour les strings)
+    if (fieldRules.pattern && isStringValue && !fieldRules.pattern.test(stringValue)) {
       return 'Le format de ce champ est invalide'
     }
 
@@ -167,7 +171,9 @@ export const commonRules = {
   password: {
     required: true,
     minLength: 8,
-    custom: (value: string) => {
+    custom: (value: unknown) => {
+      if (typeof value !== 'string') return 'Le mot de passe doit être une chaîne de caractères'
+      
       if (!/(?=.*[a-z])/.test(value)) {
         return 'Le mot de passe doit contenir au moins une lettre minuscule'
       }

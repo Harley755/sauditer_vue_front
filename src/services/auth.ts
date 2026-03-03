@@ -41,41 +41,13 @@ export class AuthService {
   private readonly endpoint = '/auth'
 
   async register(data: RegisterData): Promise<RegisterResponse> {
-    try {
-      const response = await apiService.post<RegisterResponse>(`${this.endpoint}/register`, data)
-      return response
-    } catch (error) {
-      if (error instanceof ApiError) {
-        if (error.status === 409) {
-          throw new Error('Cet email est déjà utilisé')
-        } else if (error.status === 400) {
-          throw new Error('Données invalides')
-        } else if (error.status === 422) {
-          throw new Error('Erreur de validation des données')
-        }
-        throw error
-      }
-      throw new Error('Erreur lors de l\'inscription')
-    }
+    const response = await apiService.post<RegisterResponse>(`${this.endpoint}/register`, data)
+    return response
   }
 
   async login(data: LoginData): Promise<LoginResponse> {
-    try {
-      const response = await apiService.post<LoginResponse>(`${this.endpoint}/login`, data)
-      return response
-    } catch (error) {
-      if (error instanceof ApiError) {
-        if (error.status === 401) {
-          throw new Error('Email ou mot de passe incorrect')
-        } else if (error.status === 400) {
-          throw new Error('Données invalides')
-        } else if (error.status === 422) {
-          throw new Error('Erreur de validation des données')
-        }
-        throw error
-      }
-      throw new Error('Erreur lors de la connexion')
-    }
+    const response = await apiService.post<LoginResponse>(`${this.endpoint}/login`, data)
+    return response
   }
 }
 
