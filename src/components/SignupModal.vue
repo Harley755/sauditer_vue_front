@@ -1,84 +1,194 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
-import { X, Mail, Lock, User, Building, Shield, ChevronRight } from 'lucide-vue-next'
+import { ref, watch, computed, onMounted } from 'vue'
+import { X, Mail, Lock, User, Building, Shield, ChevronRight, Loader2 } from 'lucide-vue-next'
+import { useRoleStore } from '@/stores/role'
+import { useAuthStore } from '@/stores/auth'
+import { useNotifications } from '@/composables/useNotifications'
+import { useFormValidation, commonRules } from '@/composables/useFormValidation'
+import type { Role } from '@/types/role'
 
 interface Props {
   isOpen: boolean;
-  userType: 'citizen' | 'manager' | 'auditor' | null;
+  userType?: string;
 }
 
 const props = defineProps<Props>()
 
 const emit = defineEmits<{
   (e: 'close'): void
-  (e: 'success', userType: 'citizen' | 'manager' | 'auditor'): void
+  (e: 'success', data: { userType: string; formData: any }): void
   (e: 'switchToLogin'): void
 }>()
 
+const roleStore = useRoleStore()
+const authStore = useAuthStore()
+const { success, error, handleApiError } = useNotifications()
+
 const step = ref<'select' | 'form'>('select')
-const selectedType = ref<'citizen' | 'manager' | 'auditor' | null>(null)
+const selectedRole = ref<Role | null>(null)
+const isSubmitting = ref(false)
 
 const formData = ref({
   firstName: '',
   lastName: '',
   email: '',
   password: '',
-  organization: ''
+  organization: '',
+  role_id: ''
 })
 
-const userTypeInfo = {
-  citizen: {
-    title: 'Compte Citoyen / Professionnel',
-    description: 'Pour les particuliers et petites entreprises',
-    icon: User,
-    color: 'from-cyan-500 to-blue-500'
-  },
-  manager: {
-    title: 'Compte Responsable Sécurité',
-    description: 'Pour les RSSI et responsables conformité',
-    icon: Shield,
-    color: 'from-blue-500 to-indigo-500'
-  },
-  auditor: {
-    title: 'Compte Expert Auditeur',
-    description: 'Pour les consultants et cabinets d\'audit',
-    icon: Building,
-    color: 'from-indigo-500 to-purple-500'
+// Validation rules
+const validationRules = computed(() => {
+  const rules: any = {
+    firstName: commonRules.name,
+    lastName: commonRules.name,
+    email: commonRules.email,
+    password: commonRules.password
+  }
+  
+  // Ajouter organization seulement si ce n'est pas un citoyen
+  if (selectedRole.value?.code !== 'CITOYEN') {
+    rules.organization = commonRules.required
+  }
+  
+  return rules
+})
+
+const {
+  errors,
+  validateForm,
+  setFieldTouched,
+  clearAllErrors,
+  markAllFieldsTouched,
+  markAsSubmitted,
+  getFieldError,
+  isFieldInvalid
+} = useFormValidation(formData.value, validationRules.value, () => selectedRole.value)
+
+// Computed properties for role icons and colors
+const getRoleIcon = (code: string) => {
+  switch (code.toUpperCase()) {
+    case 'CITOYEN':
+      return User
+    case 'RESPONSABLE':
+      return Shield
+    case 'AUDITOR':
+      return Building
+    default:
+      return User
   }
 }
+
+const getRoleColor = (code: string) => {
+  switch (code.toUpperCase()) {
+    case 'CITOYEN':
+      return 'from-cyan-500 to-blue-500'
+    case 'RESPONSABLE':
+      return 'from-blue-500 to-indigo-500'
+    case 'AUDITOR':
+      return 'from-indigo-500 to-purple-500'
+    default:
+      return 'from-gray-500 to-gray-600'
+  }
+}
+
+// Fetch roles on component mount
+onMounted(async () => {
+  if (roleStore.availableRoles.length === 0) {
+    await roleStore.fetchRoles()
+  }
+})
 
 watch(() => props.isOpen, (newVal) => {
   if (newVal) {
     if (props.userType) {
-      step.value = 'form'
-      selectedType.value = props.userType
+      const role = roleStore.getRoleByCode(props.userType)
+      if (role) {
+        step.value = 'form'
+        selectedRole.value = role
+      }
     } else {
       step.value = 'select'
-      selectedType.value = null
+      selectedRole.value = null
     }
   }
 })
 
-const handleSelectType = (type: 'citizen' | 'manager' | 'auditor') => {
-  selectedType.value = type
+const handleSelectRole = (role: Role) => {
+  selectedRole.value = role
+  console.log('Role sélectionné:', role)
+  formData.value.role_id = role.id?.toString() || ''
+  console.log('role_id assigné:', formData.value.role_id)
   step.value = 'form'
 }
 
-const handleSubmit = () => {
-  if (selectedType.value) {
-    emit('success', selectedType.value)
+const handleSubmit = async () => {
+  // Clear previous errors
+  clearAllErrors()
+  
+  // Mark form as submitted to show errors
+  markAsSubmitted()
+  
+  // Debug: voir les règles actuelles
+  console.log('Validation rules:', validationRules.value)
+  console.log('Form data:', formData.value)
+  
+  // Validate form
+  if (!validateForm()) {
+    console.log('Validation errors:', errors.value)
+    error('Formulaire invalide', 'Veuillez corriger les erreurs ci-dessous')
+    return
+  }
+
+  if (!selectedRole.value || !formData.value.role_id) {
+    error('Veuillez sélectionner un type de compte')
+    return
+  }
+
+  isSubmitting.value = true
+
+  try {
+    // Préparer les données pour l'API
+    const registerData = {
+      firstname: formData.value.firstName,
+      lastname: formData.value.lastName,
+      email: formData.value.email,
+      password: formData.value.password,
+      role_id: formData.value.role_id
+    }
+
+    // Appeler l'API d'inscription
+    await authStore.register(registerData)
+    
+    // Succès
+    success('Inscription réussie !', 'Bienvenue dans CyberGRC')
+    
+    // Émettre l'événement de succès
+    emit('success', {
+      userType: selectedRole.value.code,
+      formData: formData.value
+    })
+
+  } catch (err: any) {
+    // Gérer les erreurs avec le nouveau système
+    handleApiError(err)
+  } finally {
+    isSubmitting.value = false
   }
 }
 
 const handleGoogleSignup = () => {
-  if (selectedType.value) {
-    emit('success', selectedType.value)
+  if (selectedRole.value) {
+    emit('success', {
+      userType: selectedRole.value.code,
+      formData: { ...formData.value, googleSignup: true }
+    })
   }
 }
 
 const handleBack = () => {
   step.value = 'select'
-  selectedType.value = null
+  selectedRole.value = null
 }
 </script>
 
@@ -132,28 +242,45 @@ const handleBack = () => {
                   <p class="text-slate-400 text-sm">Choisissez le type de compte qui vous correspond</p>
                 </div>
 
-                <div class="grid gap-4">
+                <!-- Loading state -->
+                <div v-if="roleStore.isLoading" class="flex justify-center py-8">
+                  <Loader2 class="w-8 h-8 text-cyan-500 animate-spin" />
+                </div>
+
+                <!-- Error state -->
+                <div v-else-if="roleStore.hasError" class="text-center py-8">
+                  <p class="text-red-400 mb-4">{{ roleStore.errorMessage }}</p>
+                  <button 
+                    @click="roleStore.fetchRoles()"
+                    class="text-cyan-400 hover:text-cyan-300 font-medium"
+                  >
+                    Réessayer
+                  </button>
+                </div>
+
+                <!-- Roles list -->
+                <div v-else class="grid gap-4">
                   <button
-                    v-for="(info, type) in userTypeInfo"
-                    :key="type"
-                    @click="handleSelectType(type)"
+                    v-for="role in roleStore.availableRoles"
+                    :key="role.id"
+                    @click="handleSelectRole(role)"
                     class="w-full p-6 bg-slate-800/50 border border-slate-700 rounded-xl hover:border-cyan-500/50 hover:bg-slate-800 transition-all text-left group"
                   >
                     <div class="flex items-center gap-4">
-                      <div :class="`w-12 h-12 bg-gradient-to-br ${info.color} rounded-lg flex items-center justify-center flex-shrink-0`">
-                        <component :is="info.icon" class="w-6 h-6 text-white" />
+                      <div :class="`w-12 h-12 bg-gradient-to-br ${getRoleColor(role.code)} rounded-lg flex items-center justify-center flex-shrink-0`">
+                        <component :is="getRoleIcon(role.code)" class="w-6 h-6 text-white" />
                       </div>
                       <div class="flex-1">
-                        <h3 class="text-white mb-1 font-semibold">{{ info.title }}</h3>
-                        <p class="text-slate-400 text-xs">{{ info.description }}</p>
+                        <h3 class="text-white mb-1 font-semibold">Compte {{ role.title }}</h3>
+                        <p class="text-slate-400 text-sm">{{ role.description }}</p>
                       </div>
                       <ChevronRight class="w-5 h-5 text-slate-500 group-hover:text-cyan-400 transition-colors" />
                     </div>
                   </button>
                 </div>
 
-                <p class="mt-6 text-center text-slate-400 text-xs">
-                  Vous avez déjà un compte ?{' '}
+                <p class="mt-6 text-center text-slate-400 text-sm">
+                  Vous avez déjà un compte ?
                   <button 
                     type="button"
                     @click="emit('switchToLogin')" 
@@ -166,58 +293,73 @@ const handleBack = () => {
 
               <div v-else>
                 <!-- Signup Form -->
-                <div v-if="selectedType" class="text-center mb-8">
+                <div v-if="selectedRole" class="text-center mb-8">
                   <button
                     @click="handleBack"
-                    class="text-slate-400 hover:text-white transition-colors text-xs mb-4 flex items-center gap-1 mx-auto"
+                    class="text-slate-400 hover:text-white transition-colors text-sm mb-4 flex items-center gap-1 mx-auto"
                   >
                     <ChevronRight class="w-4 h-4 rotate-180" />
                     Retour
                   </button>
-                  <div :class="`w-14 h-14 bg-gradient-to-br ${userTypeInfo[selectedType].color} rounded-xl flex items-center justify-center mx-auto mb-4`">
-                    <component :is="userTypeInfo[selectedType].icon" class="w-7 h-7 text-white" />
+                  <div :class="`w-14 h-14 bg-gradient-to-br ${getRoleColor(selectedRole.code)} rounded-xl flex items-center justify-center mx-auto mb-4`">
+                    <component :is="getRoleIcon(selectedRole.code)" class="w-7 h-7 text-white" />
                   </div>
-                  <h2 class="text-white text-2xl mb-2 font-bold">{{ userTypeInfo[selectedType].title }}</h2>
-                  <p class="text-slate-400 text-sm">{{ userTypeInfo[selectedType].description }}</p>
+                  <h2 class="text-white text-2xl mb-2 font-bold">{{ selectedRole.title }}</h2>
+                  <p class="text-slate-400 text-sm">{{ selectedRole.description }}</p>
                 </div>
 
                 <form @submit.prevent="handleSubmit" class="space-y-4">
                   <div class="grid md:grid-cols-2 gap-4">
                     <div>
-                      <label class="text-slate-300 text-xs font-medium mb-1.5 block">Prénom</label>
+                      <label class="text-slate-300 text-sm font-medium mb-1.5 block">Prénom</label>
                       <input
                         v-model="formData.firstName"
                         type="text"
                         placeholder="Jean"
                         required
+                        @blur="setFieldTouched('firstName')"
                         class="w-full px-4 py-2.5 bg-slate-800/50 border border-slate-700 rounded-lg text-white text-sm placeholder:text-slate-500 focus:outline-none focus:border-cyan-500 transition-colors"
+                        :class="{ 'border-red-500 focus:border-red-500': isFieldInvalid('firstName') }"
                       />
+                      <p v-if="isFieldInvalid('firstName')" class="text-red-500 text-xs mt-1">
+                        {{ getFieldError('firstName') }}
+                      </p>
                     </div>
                     <div>
-                      <label class="text-slate-300 text-xs font-medium mb-1.5 block">Nom</label>
+                      <label class="text-slate-300 text-sm font-medium mb-1.5 block">Nom</label>
                       <input
                         v-model="formData.lastName"
                         type="text"
                         placeholder="Dupont"
                         required
+                        @blur="setFieldTouched('lastName')"
                         class="w-full px-4 py-2.5 bg-slate-800/50 border border-slate-700 rounded-lg text-white text-sm placeholder:text-slate-500 focus:outline-none focus:border-cyan-500 transition-colors"
+                        :class="{ 'border-red-500 focus:border-red-500': isFieldInvalid('lastName') }"
                       />
+                      <p v-if="isFieldInvalid('lastName')" class="text-red-500 text-xs mt-1">
+                        {{ getFieldError('lastName') }}
+                      </p>
                     </div>
                   </div>
 
-                  <div v-if="selectedType !== 'citizen'">
-                    <label class="text-slate-300 text-xs font-medium mb-1.5 block">Organisation</label>
+                  <div v-if="selectedRole.code !== 'CITOYEN'">
+                    <label class="text-slate-300 text-sm font-medium mb-1.5 block">Organisation</label>
                     <input
                       v-model="formData.organization"
                       type="text"
                       placeholder="Nom de votre organisation"
                       required
+                      @blur="setFieldTouched('organization')"
                       class="w-full px-4 py-2.5 bg-slate-800/50 border border-slate-700 rounded-lg text-white text-sm placeholder:text-slate-500 focus:outline-none focus:border-cyan-500 transition-colors"
+                      :class="{ 'border-red-500 focus:border-red-500': isFieldInvalid('organization') }"
                     />
+                    <p v-if="isFieldInvalid('organization')" class="text-red-500 text-xs mt-1">
+                      {{ getFieldError('organization') }}
+                    </p>
                   </div>
 
                   <div>
-                    <label class="text-slate-300 text-xs font-medium mb-1.5 block">Email professionnel</label>
+                    <label class="text-slate-300 text-sm font-medium mb-1.5 block">Email professionnel</label>
                     <div class="relative">
                       <Mail class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                       <input
@@ -225,13 +367,18 @@ const handleBack = () => {
                         type="email"
                         placeholder="votre@email.com"
                         required
+                        @blur="setFieldTouched('email')"
                         class="w-full pl-10 pr-4 py-2.5 bg-slate-800/50 border border-slate-700 rounded-lg text-white text-sm placeholder:text-slate-500 focus:outline-none focus:border-cyan-500 transition-colors"
+                        :class="{ 'border-red-500 focus:border-red-500': isFieldInvalid('email') }"
                       />
                     </div>
+                    <p v-if="isFieldInvalid('email')" class="text-red-500 text-xs mt-1">
+                      {{ getFieldError('email') }}
+                    </p>
                   </div>
 
                   <div>
-                    <label class="text-slate-300 text-xs font-medium mb-1.5 block">Mot de passe</label>
+                    <label class="text-slate-300 text-sm font-medium mb-1.5 block">Mot de passe</label>
                     <div class="relative">
                       <Lock class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                       <input
@@ -240,25 +387,30 @@ const handleBack = () => {
                         placeholder="Minimum 8 caractères"
                         required
                         minlength="8"
+                        @blur="setFieldTouched('password')"
                         class="w-full pl-10 pr-4 py-2.5 bg-slate-800/50 border border-slate-700 rounded-lg text-white text-sm placeholder:text-slate-500 focus:outline-none focus:border-cyan-500 transition-colors"
+                        :class="{ 'border-red-500 focus:border-red-500': isFieldInvalid('password') }"
                       />
                     </div>
+                    <p v-if="isFieldInvalid('password')" class="text-red-500 text-xs mt-1">
+                      {{ getFieldError('password') }}
+                    </p>
                     <p class="text-slate-500 text-[10px] mt-1">
                       Au moins 8 caractères avec majuscules, chiffres et symboles
                     </p>
                   </div>
 
                   <div class="pt-2">
-                    <label class="flex items-start gap-3 text-slate-400 text-xs cursor-pointer">
+                    <label class="flex items-start gap-3 text-slate-400 text-sm cursor-pointer">
                       <input
                         type="checkbox"
                         required
                         class="w-4 h-4 rounded border-slate-700 bg-slate-800/50 text-cyan-500 focus:ring-cyan-500 focus:ring-offset-0 mt-0.5"
                       />
                       <span>
-                        J'accepte les{' '}
-                        <a href="#" class="text-cyan-400 hover:text-cyan-300 font-medium">conditions d'utilisation</a>{' '}
-                        et la{' '}
+                        J'accepte les 
+                        <a href="#" class="text-cyan-400 hover:text-cyan-300 font-medium">conditions d'utilisation</a> 
+                        et la 
                         <a href="#" class="text-cyan-400 hover:text-cyan-300 font-medium">politique de confidentialité</a>
                       </span>
                     </label>
@@ -266,15 +418,17 @@ const handleBack = () => {
 
                   <button
                     type="submit"
-                    class="w-full py-3 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-lg hover:shadow-lg hover:shadow-cyan-500/25 transition-all text-sm font-semibold mt-4"
+                    :disabled="isSubmitting"
+                    class="w-full py-3 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-lg hover:shadow-lg hover:shadow-cyan-500/25 transition-all text-sm font-semibold mt-4 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                   >
-                    Créer mon compte
+                    <Loader2 v-if="isSubmitting" class="w-4 h-4 animate-spin" />
+                    {{ isSubmitting ? 'Inscription...' : 'Créer mon compte' }}
                   </button>
                 </form>
 
                 <div class="my-6 flex items-center gap-4">
                   <div class="flex-1 h-px bg-slate-800" />
-                  <span class="text-slate-500 text-xs font-medium">ou</span>
+                  <span class="text-slate-500 text-sm font-medium">ou</span>
                   <div class="flex-1 h-px bg-slate-800" />
                 </div>
 

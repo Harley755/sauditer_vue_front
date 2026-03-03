@@ -77,7 +77,7 @@ const handleSubmit = () => {
                 <form @submit.prevent="handleSubmit" class="space-y-4">
                   <div class="grid md:grid-cols-2 gap-4">
                     <div>
-                      <label class="text-slate-300 text-xs font-medium mb-1.5 block">Prénom *</label>
+                      <label class="text-slate-300 text-sm font-medium mb-1.5 block">Prénom *</label>
                       <input
                         type="text"
                         placeholder="Jean"
@@ -86,7 +86,7 @@ const handleSubmit = () => {
                       />
                     </div>
                     <div>
-                      <label class="text-slate-300 text-xs font-medium mb-1.5 block">Nom *</label>
+                      <label class="text-slate-300 text-sm font-medium mb-1.5 block">Nom *</label>
                       <input
                         type="text"
                         placeholder="Dupont"
@@ -97,7 +97,7 @@ const handleSubmit = () => {
                   </div>
 
                   <div>
-                    <label class="text-slate-300 text-xs font-medium mb-1.5 block">Email professionnel *</label>
+                    <label class="text-slate-300 text-sm font-medium mb-1.5 block">Email professionnel *</label>
                     <div class="relative">
                       <Mail class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                       <input
@@ -110,7 +110,7 @@ const handleSubmit = () => {
                   </div>
 
                   <div>
-                    <label class="text-slate-300 text-xs font-medium mb-1.5 block">Téléphone</label>
+                    <label class="text-slate-300 text-sm font-medium mb-1.5 block">Téléphone</label>
                     <div class="relative">
                       <Phone class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                       <input
@@ -122,7 +122,7 @@ const handleSubmit = () => {
                   </div>
 
                   <div>
-                    <label class="text-slate-300 text-xs font-medium mb-1.5 block">Entreprise *</label>
+                    <label class="text-slate-300 text-sm font-medium mb-1.5 block">Entreprise *</label>
                     <div class="relative">
                       <Building class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                       <input
@@ -135,7 +135,7 @@ const handleSubmit = () => {
                   </div>
 
                   <div>
-                    <label class="text-slate-300 text-xs font-medium mb-1.5 block">Taille de l'entreprise *</label>
+                    <label class="text-slate-300 text-sm font-medium mb-1.5 block">Taille de l'entreprise *</label>
                     <div class="relative">
                       <Users class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                       <select
@@ -153,7 +153,7 @@ const handleSubmit = () => {
                   </div>
 
                   <div>
-                    <label class="text-slate-300 text-xs font-medium mb-1.5 block">Message (optionnel)</label>
+                    <label class="text-slate-300 text-sm font-medium mb-1.5 block">Message (optionnel)</label>
                     <div class="relative">
                       <MessageSquare class="absolute left-3 top-3 w-4 h-4 text-slate-400" />
                       <textarea
@@ -172,7 +172,7 @@ const handleSubmit = () => {
                   </button>
                 </form>
 
-                <p class="mt-4 text-center text-slate-500 text-xs">
+                <p class="mt-4 text-center text-slate-500 text-sm">
                   Un expert vous contactera sous 24h ouvrées
                 </p>
               </div>

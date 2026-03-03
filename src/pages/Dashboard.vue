@@ -177,10 +177,10 @@ const stats = [
               <div class="text-4xl">{{ ref.icon }}</div>
               <div class="flex-1">
                 <h3 class="text-white mb-1 font-semibold">{{ ref.name }}</h3>
-                <p class="text-slate-400 text-xs">{{ ref.description }}</p>
+                <p class="text-slate-400 text-sm">{{ ref.description }}</p>
               </div>
             </div>
-            <div class="flex items-center justify-between text-xs text-slate-500">
+            <div class="flex items-center justify-between text-sm text-slate-500">
               <span>{{ ref.questions.length }} questions</span>
             </div>
           </div>

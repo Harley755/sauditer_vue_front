@@ -1,12 +1,16 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-import { X, Mail, Lock, Shield } from 'lucide-vue-next'
+import { ref, watch } from 'vue'
+import { X, Mail, Lock, Shield, Loader2 } from 'lucide-vue-next'
+import { useAuthStore } from '@/stores/auth'
+import { useNotifications } from '@/composables/useNotifications'
+import { useFormValidation, commonRules } from '@/composables/useFormValidation'
 
 interface Props {
   isOpen: boolean;
+  prefilledEmail?: string;
 }
 
-defineProps<Props>()
+const props = defineProps<Props>()
 
 const emit = defineEmits<{
   (e: 'close'): void
@@ -14,15 +18,74 @@ const emit = defineEmits<{
   (e: 'switchToSignup'): void
 }>()
 
+const authStore = useAuthStore()
+const { success, error, handleApiError } = useNotifications()
+
 const email = ref('')
 const password = ref('')
+const isSubmitting = ref(false)
 
-const handleSubmit = () => {
-  // Simulate login
-  emit('success', 'manager')
+// Pré-remplir l'email si fourni
+watch(() => props.prefilledEmail, (newEmail) => {
+  if (newEmail) {
+    email.value = newEmail
+  }
+}, { immediate: true })
+
+// Validation rules
+const validationRules = {
+  email: commonRules.email,
+  password: commonRules.required
+}
+
+const {
+  errors,
+  validateForm,
+  setFieldTouched,
+  clearAllErrors,
+  markAsSubmitted,
+  getFieldError,
+  isFieldInvalid
+} = useFormValidation({ email, password }, validationRules)
+
+const handleSubmit = async () => {
+  // Clear previous errors
+  clearAllErrors()
+  
+  // Mark form as submitted to show errors
+  markAsSubmitted()
+  
+  // Validate form
+  if (!validateForm()) {
+    error('Formulaire invalide', 'Veuillez corriger les erreurs ci-dessous')
+    return
+  }
+
+  isSubmitting.value = true
+
+  try {
+    // Appeler l'API de login
+    const response = await authStore.login({
+      email: email.value,
+      password: password.value
+    })
+    
+    // Succès
+    success('Connexion réussie !', 'Bienvenue dans CyberGRC')
+    
+    // Émettre l'événement de succès avec le type d'utilisateur
+    emit('success', response.user?.role?.toLowerCase() || 'manager')
+
+  } catch (err: any) {
+    // Gérer les erreurs avec le nouveau système
+    handleApiError(err)
+  } finally {
+    isSubmitting.value = false
+  }
 }
 
 const handleGoogleLogin = () => {
+  // TODO: Implémenter Google OAuth
   emit('success', 'manager')
 }
 </script>
@@ -79,7 +142,7 @@ const handleGoogleLogin = () => {
               <!-- Form -->
               <form @submit.prevent="handleSubmit" class="space-y-4">
                 <div>
-                  <label class="text-slate-300 text-xs font-medium mb-1.5 block">
+                  <label class="text-slate-300 text-sm font-medium mb-1.5 block">
                     Email
                   </label>
                   <div class="relative">
@@ -89,13 +152,18 @@ const handleGoogleLogin = () => {
                       type="email"
                       placeholder="votre@email.com"
                       required
+                      @blur="setFieldTouched('email')"
                       class="w-full pl-10 pr-4 py-2.5 bg-slate-800/50 border border-slate-700 rounded-lg text-white text-sm placeholder:text-slate-500 focus:outline-none focus:border-cyan-500 transition-colors"
+                      :class="{ 'border-red-500 focus:border-red-500': isFieldInvalid('email') }"
                     />
                   </div>
+                  <p v-if="isFieldInvalid('email')" class="text-red-500 text-xs mt-1">
+                    {{ getFieldError('email') }}
+                  </p>
                 </div>
 
                 <div>
-                  <label class="text-slate-300 text-xs font-medium mb-1.5 block">
+                  <label class="text-slate-300 text-sm font-medium mb-1.5 block">
                     Mot de passe
                   </label>
                   <div class="relative">
@@ -105,12 +173,17 @@ const handleGoogleLogin = () => {
                       type="password"
                       placeholder="••••••••"
                       required
+                      @blur="setFieldTouched('password')"
                       class="w-full pl-10 pr-4 py-2.5 bg-slate-800/50 border border-slate-700 rounded-lg text-white text-sm placeholder:text-slate-500 focus:outline-none focus:border-cyan-500 transition-colors"
+                      :class="{ 'border-red-500 focus:border-red-500': isFieldInvalid('password') }"
                     />
                   </div>
+                  <p v-if="isFieldInvalid('password')" class="text-red-500 text-xs mt-1">
+                    {{ getFieldError('password') }}
+                  </p>
                 </div>
 
-                <div class="flex items-center justify-between text-xs font-medium">
+                <div class="flex items-center justify-between text-sm font-medium">
                   <label class="flex items-center gap-2 text-slate-400 cursor-pointer">
                     <input
                       type="checkbox"
@@ -125,16 +198,18 @@ const handleGoogleLogin = () => {
 
                 <button
                   type="submit"
-                  class="w-full py-3 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-lg hover:shadow-lg hover:shadow-cyan-500/25 transition-all text-sm font-semibold mt-6"
+                  :disabled="isSubmitting"
+                  class="w-full py-3 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-lg hover:shadow-lg hover:shadow-cyan-500/25 transition-all text-sm font-semibold mt-6 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
-                  Se connecter
+                  <Loader2 v-if="isSubmitting" class="w-4 h-4 animate-spin" />
+                  {{ isSubmitting ? 'Connexion...' : 'Se connecter' }}
                 </button>
               </form>
 
               <!-- Divider -->
               <div class="my-6 flex items-center gap-4">
                 <div class="flex-1 h-px bg-slate-800" />
-                <span class="text-slate-500 text-xs">ou</span>
+                <span class="text-slate-500 text-sm">ou</span>
                 <div class="flex-1 h-px bg-slate-800" />
               </div>
 
@@ -156,8 +231,8 @@ const handleGoogleLogin = () => {
               </div>
 
               <!-- Footer -->
-              <p class="mt-6 text-center text-slate-400 text-xs">
-                Pas encore de compte ?{' '}
+              <p class="mt-6 text-center text-slate-400 text-sm">
+                Pas encore de compte ? 
                 <button 
                   type="button"
                   @click="emit('switchToSignup')" 

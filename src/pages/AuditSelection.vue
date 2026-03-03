@@ -70,11 +70,11 @@ const getCategories = (referential: any) => {
 
           <!-- Stats -->
           <div class="flex items-center gap-4 pt-4 border-t border-slate-800">
-            <div class="flex items-center gap-2 text-slate-500 text-xs">
+            <div class="flex items-center gap-2 text-slate-500 text-sm">
               <div class="w-2 h-2 bg-cyan-500 rounded-full" />
               {{ referential.questions.length }} questions
             </div>
-            <div class="flex items-center gap-2 text-slate-500 text-xs">
+            <div class="flex items-center gap-2 text-slate-500 text-sm">
               <div class="w-2 h-2 bg-blue-500 rounded-full" />
               ~30-45 min
             </div>
@@ -104,7 +104,7 @@ const getCategories = (referential: any) => {
           </div>
           <div>
             <h4 class="text-white mb-2 font-semibold">Besoin d'aide pour choisir ?</h4>
-            <p class="text-slate-400 text-xs leading-relaxed">
+            <p class="text-slate-400 text-sm leading-relaxed">
               Chaque référentiel correspond à des exigences spécifiques. L'ISO 27001 est idéal pour la gestion globale de la sécurité, 
               le RGPD pour la protection des données personnelles, NIS 2 pour les opérateurs de services essentiels, 
               SOC 2 pour les fournisseurs de services cloud, et PCI DSS pour le traitement des paiements par carte.

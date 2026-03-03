@@ -21,6 +21,7 @@ const isLoginOpen = ref(false)
 const isSignupOpen = ref(false)
 const isDemoOpen = ref(false)
 const signupUserType = ref<'citizen' | 'manager' | 'auditor' | null>(null)
+const prefilledLoginEmail = ref<string>('')
 
 const handleSignup = (userType: 'citizen' | 'manager' | 'auditor') => {
   signupUserType.value = userType
@@ -30,13 +31,24 @@ const handleSignup = (userType: 'citizen' | 'manager' | 'auditor') => {
 const handleLoginSuccess = (userType: 'citizen' | 'manager' | 'auditor') => {
   auditStore.login(userType)
   isLoginOpen.value = false
+  prefilledLoginEmail.value = ''  // Réinitialiser l'email pré-rempli
   router.push('/dashboard')
 }
 
-const handleSignupSuccess = (userType: 'citizen' | 'manager' | 'auditor') => {
-  auditStore.login(userType)
+const handleSignupSuccess = (data: { userType: string; formData: any }) => {
+  console.log('Signup success data:', data)
+  
+  // Fermer la modale d'inscription
   isSignupOpen.value = false
-  router.push('/dashboard')
+  
+  // Pré-remplir l'email pour le login
+  prefilledLoginEmail.value = data.formData.email
+  
+  // Afficher la modale de login pour que l'utilisateur se connecte
+  isLoginOpen.value = true
+  
+  // Réinitialiser
+  signupUserType.value = null
 }
 
 const handleStartAudit = () => {
@@ -65,6 +77,7 @@ const handleStartAudit = () => {
     
     <LoginModal 
       :is-open="isLoginOpen" 
+      :prefilled-email="prefilledLoginEmail"
       @close="isLoginOpen = false"
       @success="handleLoginSuccess"
       @switch-to-signup="() => {

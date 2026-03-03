@@ -67,7 +67,7 @@ const links = {
           </h3>
           <ul class="space-y-2">
             <li v-for="(link, index) in group" :key="index">
-              <a :href="link.href" class="text-slate-400 hover:text-cyan-400 transition-colors text-xs">
+              <a :href="link.href" class="text-slate-400 hover:text-cyan-400 transition-colors text-sm">
                 {{ link.label }}
               </a>
             </li>
@@ -79,24 +79,24 @@ const links = {
       <div class="py-8 border-t border-slate-800">
         <div class="flex flex-wrap items-center justify-center gap-8 mb-8">
           <div v-for="(cert, index) in ['ISO 27001', 'SOC 2', 'RGPD', 'NIST']" :key="index" class="px-4 py-2 bg-slate-800/50 border border-slate-700 rounded-lg">
-            <span class="text-slate-400 text-xs font-medium">{{ cert }}</span>
+            <span class="text-slate-400 text-sm font-medium">{{ cert }}</span>
           </div>
         </div>
       </div>
 
       <!-- Copyright -->
       <div class="pt-8 border-t border-slate-800 flex flex-col md:flex-row items-center justify-between gap-4">
-        <p class="text-slate-400 text-xs">
+        <p class="text-slate-400 text-sm">
           © 2025 CyberGRC. Tous droits réservés.
         </p>
         <div class="flex gap-6">
-          <a href="#" class="text-slate-400 hover:text-cyan-400 transition-colors text-xs">
+          <a href="#" class="text-slate-400 hover:text-cyan-400 transition-colors text-sm">
             LinkedIn
           </a>
-          <a href="#" class="text-slate-400 hover:text-cyan-400 transition-colors text-xs">
+          <a href="#" class="text-slate-400 hover:text-cyan-400 transition-colors text-sm">
             Twitter
           </a>
-          <a href="#" class="text-slate-400 hover:text-cyan-400 transition-colors text-xs">
+          <a href="#" class="text-slate-400 hover:text-cyan-400 transition-colors text-sm">
             GitHub
           </a>
         </div>

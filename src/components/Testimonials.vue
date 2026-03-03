@@ -60,7 +60,7 @@ const testimonials = [
           </p>
 
           <div class="flex items-center gap-4">
-            <div class="w-12 h-12 bg-gradient-to-br from-cyan-500 to-blue-500 rounded-full flex items-center justify-center text-xs">
+            <div class="w-12 h-12 bg-gradient-to-br from-cyan-500 to-blue-500 rounded-full flex items-center justify-center text-sm">
               <span class="text-white">{{ testimonial.avatar }}</span>
             </div>
             <div>

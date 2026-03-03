@@ -215,7 +215,7 @@ const weakCategories = computed(() => {
               <div class="absolute inset-0 flex items-center justify-center">
                 <div class="text-center">
                   <div class="text-white text-5xl font-bold mb-1 tracking-tighter">{{ results.score }}</div>
-                  <div class="text-slate-500 text-xs font-bold uppercase tracking-widest">/ 100</div>
+                  <div class="text-slate-500 text-sm font-bold uppercase tracking-widest">/ 100</div>
                 </div>
               </div>
             </div>

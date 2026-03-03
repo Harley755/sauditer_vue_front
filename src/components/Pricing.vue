@@ -125,7 +125,7 @@ const plans = [
 
       <div class="mt-12 text-center animate-in fade-in duration-1000 delay-500">
         <p class="text-slate-400 text-sm">
-          Besoin d'une configuration spécifique ?{' '}
+          Besoin d'une configuration spécifique ? 
           <a href="#" class="text-cyan-400 hover:text-cyan-300 transition-colors underline underline-offset-4">
             Contactez notre équipe commerciale
           </a>

@@ -119,7 +119,7 @@ const answerOptions = [
             </button>
             
             <div class="flex items-center gap-3">
-              <div class="text-slate-400 text-xs font-medium">
+              <div class="text-slate-400 text-sm font-medium">
                 Question {{ currentQuestionIndex + 1 }} / {{ referential.questions.length }}
               </div>
               <button
@@ -144,8 +144,8 @@ const answerOptions = [
           <div class="mt-4 flex items-center gap-2">
             <span class="text-xl">{{ referential.icon }}</span>
             <span class="text-white text-sm font-semibold">{{ referential.name }}</span>
-            <span class="text-slate-600 text-xs">•</span>
-            <span class="text-slate-400 text-xs font-medium">{{ currentQuestion?.category }}</span>
+            <span class="text-slate-600 text-sm">•</span>
+            <span class="text-slate-400 text-sm font-medium">{{ currentQuestion?.category }}</span>
           </div>
         </div>
       </div>
@@ -198,7 +198,7 @@ const answerOptions = [
                       :class="[selectedAnswer === option.value ? option.color : 'text-slate-500']"
                     />
                     <div 
-                      class="text-xs font-bold uppercase tracking-wider text-center"
+                      class="text-sm font-bold uppercase tracking-wider text-center"
                       :class="[selectedAnswer === option.value ? option.color : 'text-slate-400']"
                     >
                       {{ option.label }}
