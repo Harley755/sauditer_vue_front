@@ -253,6 +253,15 @@ const handleNext = () => {
   } else {
     console.log("LAST QUESTION - SUBMITTING ANSWERS")
     
+    // Vérifier que toutes les questions ont une réponse
+    const totalQuestions = questionnaireStore.currentQuestionnaire?.questions.length || 0
+    const totalAnswers = auditStore.currentAudit?.answers.length || 0
+
+    if (totalAnswers !== totalQuestions) {
+      alert("Veuillez répondre à toutes les questions avant de terminer l'audit.")
+      return
+    }
+
     // Debug du store avant construction du payload
     console.log("FINAL ANSWERS:", auditStore.currentAudit?.answers)
     

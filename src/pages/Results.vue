@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { 
   ArrowLeft, 
   TrendingUp, 
@@ -11,347 +11,526 @@ import {
   Download,
   BarChart3,
   PieChart,
-  Target
+  Target,
+  Loader2,
+  RefreshCw
 } from 'lucide-vue-next'
 import { useAuditStore } from '@/stores/audit'
-import { referentials, getScoreLevel } from '@/data/referentials'
 import VueApexCharts from 'vue3-apexcharts'
 
 const router = useRouter()
+const route = useRoute()
 const auditStore = useAuditStore()
 
-const referential = computed(() => 
-  referentials.find(r => r.id === auditStore.currentAudit?.referentialId)
-)
+// State
+const loading = ref(true)
+const analysisRunning = ref(false)
+const scoreData = ref<any>(null)
+const reportData = ref<any>(null)
+const error = ref<string | null>(null)
+const pollingInterval = ref<NodeJS.Timeout | null>(null)
+const pollingTimeout = ref<NodeJS.Timeout | null>(null)
+const retryCount = ref(0)
 
-// Calculate scores
-const results = computed(() => {
-  if (!auditStore.currentAudit || !referential.value) return null
+// Computed
+const questionnaireId = computed(() => {
+  return route.query.questionnaire_id as string || auditStore.currentAudit?.referentialId
+})
 
-  const totalWeight = referential.value.questions.reduce((sum, q) => sum + q.weight, 0)
-  let earnedPoints = 0
-
-  auditStore.currentAudit.answers.forEach(answer => {
-    const question = referential.value?.questions.find(q => q.id === answer.questionId)
-    if (!question) return
-
-    if (answer.answer === 'yes') {
-      earnedPoints += question.weight
-    } else if (answer.answer === 'partial') {
-      earnedPoints += question.weight * 0.5
-    }
-  })
-
-  const score = Math.round((earnedPoints / totalWeight) * 100)
-  const scoreLevel = getScoreLevel(score)
-
-  // Calculate by category
-  const categoryScores: Record<string, { score: number; total: number; questions: number }> = {}
+const scoreLevel = computed(() => {
+  if (!scoreData.value?.score_global) return { level: 'unknown', color: 'text-slate-400', label: 'Inconnu' }
   
-  referential.value.questions.forEach(question => {
-    if (!categoryScores[question.category]) {
-      categoryScores[question.category] = { score: 0, total: 0, questions: 0 }
+  const score = scoreData.value.score_global
+  
+  if (score >= 80) return { level: 'excellent', color: 'text-emerald-400', label: 'Excellent' }
+  if (score >= 60) return { level: 'good', color: 'text-blue-400', label: 'Bon' }
+  if (score >= 40) return { level: 'moderate', color: 'text-yellow-400', label: 'Modéré' }
+  if (score >= 20) return { level: 'weak', color: 'text-orange-400', label: 'Faible' }
+  return { level: 'critical', color: 'text-red-400', label: 'Critique' }
+})
+
+// API functions
+const API_BASE_URL = (import.meta.env?.VITE_API_BASE_URL as string) || 'http://localhost:8001'
+
+const fetchScore = async () => {
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/api/v1/scores/score/${questionnaireId.value}`,
+      {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          "X-User-Id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+          "questionnaire_id": questionnaireId.value
+        }
+      }
+    )
+    
+    
+    if (response.status === 404) {
+      console.log('Score not found yet, analysis still running...')
+      return null
     }
     
-    const answer = auditStore.currentAudit?.answers.find(a => a.questionId === question.id)
-    categoryScores[question.category].total += question.weight
-    categoryScores[question.category].questions += 1
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
+    }
     
-    if (answer) {
-      if (answer.answer === 'yes') {
-        categoryScores[question.category].score += question.weight
-      } else if (answer.answer === 'partial') {
-        categoryScores[question.category].score += question.weight * 0.5
+    const score = await response.json()
+    console.log('Score data received:', score)
+    return score
+  } catch (error) {
+    console.error('Error fetching score:', error)
+    throw error
+  }
+}
+
+const fetchReport = async () => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/v1/reports/report/${questionnaireId.value}`,
+      {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          "X-User-Id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+          "questionnaire_id": questionnaireId.value
+        }
+      }
+    )
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
+    }
+    
+    const report = await response.json()
+    console.log('Report data received:', report)
+    return report
+  } catch (error) {
+    console.error('Error fetching report:', error)
+    throw error
+  }
+}
+
+// Polling logic
+const startPolling = () => {
+  console.log('Starting polling for score...')
+  analysisRunning.value = true
+  
+  pollingInterval.value = setInterval(async () => {
+    try {
+      const score = await fetchScore()
+      
+      if (score) {
+        console.log('Score found! Stopping polling.')
+        stopPolling()
+        scoreData.value = score
+        
+        // Fetch report after score is found
+        const report = await fetchReport()
+        reportData.value = report
+        
+        analysisRunning.value = false
+        loading.value = false
+      }
+    } catch (error) {
+      console.error('Polling error:', error)
+      retryCount.value++
+      
+      if (retryCount.value >= 30) { // 30 * 2s = 60 seconds timeout
+        stopPolling()
+        error.value = "L'analyse prend plus de temps que prévu. Veuillez réessayer plus tard."
+        analysisRunning.value = false
+        loading.value = false
       }
     }
-  })
+  }, 2000) // Poll every 2 seconds
+  
+  // Set timeout after 60 seconds
+  pollingTimeout.value = setTimeout(() => {
+    stopPolling()
+    error.value = "L'analyse prend plus de temps que prévu. Veuillez réessayer plus tard."
+    analysisRunning.value = false
+    loading.value = false
+  }, 60000)
+}
 
-  // Answer distribution
-  const answerCounts = {
-    yes: auditStore.currentAudit.answers.filter(a => a.answer === 'yes').length,
-    partial: auditStore.currentAudit.answers.filter(a => a.answer === 'partial').length,
-    no: auditStore.currentAudit.answers.filter(a => a.answer === 'no').length,
-    na: auditStore.currentAudit.answers.filter(a => a.answer === 'na').length
+const stopPolling = () => {
+  if (pollingInterval.value) {
+    clearInterval(pollingInterval.value)
+    pollingInterval.value = null
   }
+  
+  if (pollingTimeout.value) {
+    clearTimeout(pollingTimeout.value)
+    pollingTimeout.value = null
+  }
+}
 
-  return {
-    score,
-    scoreLevel,
-    categoryScores,
-    answerCounts,
-    totalQuestions: referential.value.questions.length,
-    answeredQuestions: auditStore.currentAudit.answers.length
-  }
-})
-
-onMounted(() => {
-  if (auditStore.currentAudit && !auditStore.currentAudit.completedAt) {
-    auditStore.completeAudit()
-  }
-  if (!auditStore.currentAudit || !results.value) {
-    router.push('/dashboard')
-  }
-})
-
-// Chart options
-const barChartOptions = computed(() => ({
-  chart: {
-    type: 'bar',
-    toolbar: { show: false },
-    background: 'transparent'
-  },
-  colors: ['#06b6d4'],
-  plotOptions: {
-    bar: {
-      borderRadius: 4,
-      horizontal: true,
+const retryAnalysis = async () => {
+  try {
+    if (!questionnaireId.value) {
+      error.value = "Identifiant de questionnaire manquant."
+      return
     }
-  },
-  dataLabels: { enabled: false },
-  xaxis: {
-    categories: results.value ? Object.keys(results.value.categoryScores) : [],
-    labels: { style: { colors: '#64748b' } }
-  },
-  yaxis: {
-    labels: { style: { colors: '#64748b' } }
-  },
-  grid: { borderColor: '#1e293b' },
-  theme: { mode: 'dark' }
-}))
 
-const barChartSeries = computed(() => [{
-  name: 'Score',
-  data: results.value ? Object.values(results.value.categoryScores).map(d => Math.round((d.score / d.total) * 100)) : []
-}])
+    console.log("Retrying analysis for:", questionnaireId.value)
 
-const pieChartOptions = computed(() => ({
-  chart: { type: 'donut', background: 'transparent' },
-  labels: ['Conforme', 'Partiel', 'Non conforme', 'N/A'],
-  colors: ['#10b981', '#f59e0b', '#ef4444', '#64748b'],
-  legend: { position: 'bottom', labels: { colors: '#64748b' } },
-  stroke: { show: false },
-  theme: { mode: 'dark' }
-}))
+    error.value = null
+    retryCount.value = 0
+    loading.value = true
+    analysisRunning.value = true
 
-const pieChartSeries = computed(() => results.value ? [
-  results.value.answerCounts.yes,
-  results.value.answerCounts.partial,
-  results.value.answerCounts.no,
-  results.value.answerCounts.na
-] : [])
+    const response = await fetch(
+      `${API_BASE_URL}/api/v1/questionnaires/${questionnaireId.value}/reanalyze`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-user-id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+        }
+      }
+    )
 
-const weakCategories = computed(() => {
-  if (!results.value) return []
-  return Object.entries(results.value.categoryScores)
-    .map(([category, data]) => ({
-      category,
-      score: Math.round((data.score / data.total) * 100)
-    }))
-    .filter(c => c.score < 70)
-    .sort((a, b) => a.score - b.score)
-    .slice(0, 3)
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
+    }
+
+    const result = await response.json()
+
+    console.log("Reanalysis started:", result)
+
+    // relancer polling
+    initializeResults()
+
+  } catch (err) {
+    console.error("Error retrying analysis:", err)
+
+    error.value = "Impossible de relancer l'analyse. Veuillez réessayer."
+    loading.value = false
+    analysisRunning.value = false
+  }
+}
+
+const initializeResults = async () => {
+  if (!questionnaireId.value) {
+    error.value = "Aucun identifiant de questionnaire trouvé."
+    loading.value = false
+    return
+  }
+  
+  try {
+    // First attempt to get score
+    const score = await fetchScore()
+    
+    if (score) {
+      scoreData.value = score
+      
+      // Get report if score exists
+      const report = await fetchReport()
+      reportData.value = report
+      
+      loading.value = false
+    } else {
+      // Start polling if score not found
+      startPolling()
+    }
+  } catch (error) {
+    console.error('Error initializing results:', error)
+    error.value = "Erreur lors du chargement des résultats. Veuillez réessayer."
+    loading.value = false
+  }
+}
+
+// Chart configurations
+const radarChartOptions = computed(() => {
+  if (!reportData.value?.radar_par_domaine) return {}
+  
+  const domains = Object.keys(reportData.value.radar_par_domaine)
+  const values = Object.values(reportData.value.radar_par_domaine)
+  
+  return {
+    series: [{
+      name: 'Score par domaine',
+      data: values
+    }],
+    chart: {
+      type: 'radar',
+      toolbar: { show: false }
+    },
+    xaxis: {
+      categories: domains
+    },
+    yaxis: {
+      max: 100,
+      labels: {
+        formatter: (val: number) => `${val}%`
+      }
+    },
+    plotOptions: {
+      radar: {
+        polygons: {
+          strokeColors: '#1e293b',
+          fill: {
+            colors: ['#0891b2']
+          }
+        }
+      }
+    }
+  }
+})
+
+const barChartOptions = computed(() => {
+  if (!reportData.value?.radar_par_domaine) return {}
+  
+  const domains = Object.keys(reportData.value.radar_par_domaine)
+  const values = Object.values(reportData.value.radar_par_domaine)
+  
+  return {
+    series: [{
+      name: 'Score',
+      data: values
+    }],
+    chart: {
+      type: 'bar',
+      toolbar: { show: false }
+    },
+    xaxis: {
+      categories: domains
+    },
+    yaxis: {
+      max: 100,
+      labels: {
+        formatter: (val: number) => `${val}%`
+      }
+    },
+    plotOptions: {
+      bar: {
+        borderRadius: 8,
+        colors: ['#0891b2']
+      }
+    }
+  }
+})
+
+// Lifecycle
+onMounted(() => {
+  console.log('Results mounted, questionnaire_id:', questionnaireId.value)
+  initializeResults()
+})
+
+onUnmounted(() => {
+  stopPolling()
 })
 </script>
 
 <template>
-  <div v-if="results && referential" class="min-h-screen bg-slate-950">
-    <!-- Background decorations -->
-    <div class="absolute inset-0 overflow-hidden pointer-events-none">
-      <div class="absolute top-0 right-0 w-96 h-96 bg-cyan-500/5 rounded-full blur-3xl" />
-      <div class="absolute bottom-0 left-0 w-96 h-96 bg-blue-500/5 rounded-full blur-3xl" />
+  <div class="min-h-screen bg-slate-950">
+    <!-- Header -->
+    <nav class="border-b border-slate-800 bg-slate-900/50 backdrop-blur-sm sticky top-0 z-40">
+      <div class="container mx-auto px-6 py-4">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <div class="w-10 h-10 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-lg flex items-center justify-center">
+              <Target class="w-6 h-6 text-white" />
+            </div>
+            <span class="text-white text-xl tracking-tight">Sauditer.bj</span>
+          </div>
+          
+          <button 
+            @click="router.push({ name: 'Dashboard' })"
+            class="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors"
+          >
+            <ArrowLeft class="w-4 h-4" />
+            Retour au dashboard
+          </button>
+        </div>
+      </div>
+    </nav>
+
+    <!-- Loading State -->
+    <div v-if="loading" class="container mx-auto px-6 py-12">
+      <div class="text-center">
+        <div v-if="analysisRunning" class="max-w-md mx-auto">
+          <Loader2 class="w-16 h-16 text-cyan-500 animate-spin mx-auto mb-6" />
+          <h2 class="text-2xl font-bold text-white mb-4">
+            Analyse de votre posture cybersécurité en cours...
+          </h2>
+          <p class="text-slate-400 mb-6">
+            Cela peut prendre quelques secondes. Nous analysons vos réponses pour générer un rapport personnalisé.
+          </p>
+          <div class="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
+            <div class="bg-gradient-to-r from-cyan-500 to-blue-600 h-full animate-pulse" style="width: 60%"></div>
+          </div>
+        </div>
+        
+        <div v-else class="max-w-md mx-auto">
+          <Loader2 class="w-16 h-16 text-cyan-500 animate-spin mx-auto mb-6" />
+          <h2 class="text-2xl font-bold text-white mb-4">
+            Chargement des résultats...
+          </h2>
+        </div>
+      </div>
     </div>
 
-    <div class="relative container mx-auto px-6 py-8">
-      <!-- Header -->
-      <div class="flex items-center justify-between mb-8">
-        <button
-          @click="router.push('/dashboard')"
-          class="flex items-center gap-2 text-slate-400 hover:text-white transition-colors text-sm font-medium"
+    <!-- Error State -->
+    <div v-else-if="error" class="container mx-auto px-6 py-12">
+      <div class="text-center max-w-md mx-auto">
+        <AlertTriangle class="w-16 h-16 text-red-500 mx-auto mb-6" />
+        <h2 class="text-2xl font-bold text-white mb-4">
+          Une erreur est survenue
+        </h2>
+        <p class="text-slate-400 mb-6">{{ error }}</p>
+        <button 
+          @click="retryAnalysis"
+          class="flex items-center gap-2 px-6 py-3 bg-cyan-500 hover:bg-cyan-600 text-white rounded-lg transition-colors mx-auto"
         >
-          <ArrowLeft class="w-4 h-4" />
-          Retour au tableau de bord
-        </button>
-
-        <button class="px-4 py-2 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-lg hover:shadow-lg hover:shadow-cyan-500/25 transition-all flex items-center gap-2 text-sm font-semibold">
-          <Download class="w-4 h-4" />
-          Exporter le rapport
+          <RefreshCw class="w-4 h-4" />
+          Relancer l'analyse
         </button>
       </div>
+    </div>
 
-      <!-- Score Hero Section -->
-      <div class="mb-12 animate-in fade-in slide-in-from-bottom-5 duration-700">
-        <div class="bg-slate-900/50 border border-slate-800 rounded-2xl p-8 md:p-12 shadow-2xl backdrop-blur-sm">
-          <div class="flex flex-col md:flex-row items-center gap-12">
-            <!-- Score Circle -->
-            <div class="relative group">
-              <svg class="w-48 h-48 transform -rotate-90">
-                <circle
-                  cx="96"
-                  cy="96"
-                  r="88"
-                  stroke="currentColor"
-                  stroke-width="12"
-                  fill="none"
-                  class="text-slate-800"
-                />
-                <circle
-                  cx="96"
-                  cy="96"
-                  r="88"
-                  stroke="url(#scoreGradient)"
-                  stroke-width="12"
-                  fill="none"
-                  :stroke-dasharray="`${(results.score / 100) * 553} 553`"
-                  stroke-linecap="round"
-                  class="transition-all duration-1000 ease-out"
-                />
-                <defs>
-                  <linearGradient id="scoreGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-                    <stop offset="0%" stop-color="#06b6d4" />
-                    <stop offset="100%" stop-color="#3b82f6" />
-                  </linearGradient>
-                </defs>
-              </svg>
-              <div class="absolute inset-0 flex items-center justify-center">
-                <div class="text-center">
-                  <div class="text-white text-5xl font-bold mb-1 tracking-tighter">{{ results.score }}</div>
-                  <div class="text-slate-500 text-sm font-bold uppercase tracking-widest">/ 100</div>
-                </div>
+    <!-- Results Display -->
+    <div v-else-if="scoreData && reportData" class="container mx-auto px-6 py-12">
+      <!-- Score Header -->
+      <div class="bg-gradient-to-br from-slate-900 to-slate-800 border border-slate-700 rounded-2xl p-8 mb-8">
+        <div class="text-center">
+          <h1 class="text-4xl font-bold text-white mb-4">Résultats de l'audit</h1>
+          <div class="flex items-center justify-center gap-4 mb-6">
+            <div class="text-6xl font-bold" :class="scoreLevel.color">
+              {{ scoreData.score_global }}%
+            </div>
+            <div class="text-right">
+              <div class="text-xl font-semibold" :class="scoreLevel.color">
+                {{ scoreLevel.label }}
+              </div>
+              <div class="text-sm text-slate-400">
+                Score global
               </div>
             </div>
-
-            <!-- Score Details -->
-            <div class="flex-1 text-center md:text-left">
-              <div class="flex items-center gap-3 mb-4 justify-center md:justify-start">
-                <span class="text-3xl">{{ referential.icon }}</span>
-                <h1 class="text-white text-3xl font-bold tracking-tight">{{ referential.name }}</h1>
-              </div>
-              
-              <div :class="`inline-flex items-center gap-2 px-4 py-2 rounded-lg mb-6 ${results.scoreLevel.bgColor} shadow-sm shadow-black/20`">
-                <Target :class="`w-5 h-5 ${results.scoreLevel.color}`" />
-                <span :class="`text-sm font-bold uppercase tracking-wider ${results.scoreLevel.color}`">
-                  Niveau : {{ results.scoreLevel.label }}
-                </span>
-              </div>
-
-              <p class="text-slate-400 text-lg mb-8 leading-relaxed">
-                {{ results.score >= 90 ? 'Excellent ! Votre organisation démontre une maturité exemplaire en cybersécurité.' :
-                   results.score >= 70 ? 'Bon niveau de conformité. Quelques améliorations ciblées renforceront votre posture.' :
-                   results.score >= 50 ? 'Conformité moyenne. Des efforts significatifs sont nécessaires pour atteindre les standards.' :
-                   results.score >= 30 ? 'Conformité faible. Des mesures urgentes doivent être prises.' :
-                   'Situation critique. Une action immédiate est requise pour sécuriser votre organisation.' }}
-              </p>
-
-              <div class="flex flex-wrap gap-6 justify-center md:justify-start text-slate-400">
-                <div class="flex items-center gap-2 text-sm font-medium">
-                  <FileText class="w-4 h-4 text-cyan-500" />
-                  {{ results.answeredQuestions }} / {{ results.totalQuestions }} questions
-                </div>
-                <div class="flex items-center gap-2 text-sm font-medium">
-                  <CheckCircle class="w-4 h-4 text-emerald-400" />
-                  {{ results.answerCounts.yes }} conformes
-                </div>
-                <div class="flex items-center gap-2 text-sm font-medium">
-                  <AlertTriangle class="w-4 h-4 text-red-400" />
-                  {{ results.answerCounts.no }} non conformes
-                </div>
-              </div>
-            </div>
+          </div>
+          
+          <div class="text-slate-300 max-w-2xl mx-auto">
+            {{ reportData.resume_executif }}
           </div>
         </div>
       </div>
 
       <!-- Charts Section -->
-      <div class="grid lg:grid-cols-2 gap-8 mb-8">
-        <!-- Category Scores -->
-        <div class="bg-slate-900/50 border border-slate-800 rounded-xl p-8 shadow-xl animate-in fade-in slide-in-from-bottom-5 duration-700 delay-200">
-          <div class="flex items-center gap-3 mb-8">
-            <BarChart3 class="w-6 h-6 text-cyan-400" />
-            <h2 class="text-white text-xl font-bold tracking-tight">Score par catégorie</h2>
-          </div>
-          
-          <div class="h-[300px]">
-            <VueApexCharts
-              type="bar"
-              height="100%"
-              :options="barChartOptions"
-              :series="barChartSeries"
-            />
-          </div>
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+        <!-- Radar Chart -->
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-6">
+          <h3 class="text-xl font-semibold text-white mb-4 flex items-center gap-2">
+            <PieChart class="w-5 h-5 text-cyan-500" />
+            Score par domaine
+          </h3>
+          <VueApexCharts 
+            type="radar" 
+            :options="radarChartOptions" 
+            :series="radarChartOptions.series"
+            height="300"
+          />
         </div>
 
-        <!-- Answer Distribution -->
-        <div class="bg-slate-900/50 border border-slate-800 rounded-xl p-8 shadow-xl animate-in fade-in slide-in-from-bottom-5 duration-700 delay-300">
-          <div class="flex items-center gap-3 mb-8">
-            <PieChart class="w-6 h-6 text-cyan-400" />
-            <h2 class="text-white text-xl font-bold tracking-tight">Distribution des réponses</h2>
-          </div>
-          
-          <div class="h-[300px]">
-            <VueApexCharts
-              type="donut"
-              height="100%"
-              :options="pieChartOptions"
-              :series="pieChartSeries"
-            />
+        <!-- Bar Chart -->
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-6">
+          <h3 class="text-xl font-semibold text-white mb-4 flex items-center gap-2">
+            <BarChart3 class="w-5 h-5 text-cyan-500" />
+            Distribution des scores
+          </h3>
+          <VueApexCharts 
+            type="bar" 
+            :options="barChartOptions" 
+            :series="barChartOptions.series"
+            height="300"
+          />
+        </div>
+      </div>
+
+      <!-- Critical Issues -->
+      <div v-if="reportData.ecarts_majeurs?.length" class="bg-red-900/20 border border-red-800/50 rounded-xl p-6 mb-8">
+        <h3 class="text-xl font-semibold text-red-400 mb-4 flex items-center gap-2">
+          <AlertTriangle class="w-5 h-5" />
+          Écarts majeurs identifiés
+        </h3>
+        <ul class="space-y-2">
+          <li v-for="(ecart, index) in reportData.ecarts_majeurs" :key="index" class="flex items-start gap-3">
+            <div class="w-2 h-2 bg-red-500 rounded-full mt-2 flex-shrink-0"></div>
+            <span class="text-red-300">{{ ecart }}</span>
+          </li>
+        </ul>
+      </div>
+
+      <!-- Priority Risks -->
+      <div v-if="reportData.risques_prioritaires?.length" class="bg-orange-900/20 border border-orange-800/50 rounded-xl p-6 mb-8">
+        <h3 class="text-xl font-semibold text-orange-400 mb-4 flex items-center gap-2">
+          <TrendingUp class="w-5 h-5" />
+          Risques prioritaires
+        </h3>
+        <ul class="space-y-2">
+          <li v-for="(risque, index) in reportData.risques_prioritaires" :key="index" class="flex items-start gap-3">
+            <div class="w-2 h-2 bg-orange-500 rounded-full mt-2 flex-shrink-0"></div>
+            <span class="text-orange-300">{{ risque }}</span>
+          </li>
+        </ul>
+      </div>
+
+      <!-- Action Plan -->
+      <div v-if="reportData.plan_action_priorise?.length" class="bg-slate-900 border border-slate-800 rounded-xl p-6 mb-8">
+        <h3 class="text-xl font-semibold text-white mb-4 flex items-center gap-2">
+          <Target class="w-5 h-5 text-cyan-500" />
+          Plan d'action priorisé
+        </h3>
+        <div class="space-y-4">
+          <div v-for="(action, index) in reportData.plan_action_priorise" :key="index" class="border border-slate-700 rounded-lg p-4">
+            <div class="flex items-start justify-between mb-2">
+              <h4 class="font-semibold text-white">{{ action.description_action }}</h4>
+              <span class="px-2 py-1 text-xs font-medium rounded" 
+                :class="{
+                  'bg-green-900/50 text-green-400': action.priorite === 'low',
+                  'bg-yellow-900/50 text-yellow-400': action.priorite === 'medium', 
+                  'bg-red-900/50 text-red-400': action.priorite === 'high'
+                }">
+                {{ action.priorite.toUpperCase() }}
+              </span>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+              <div>
+                <span class="text-slate-400">Impact risque:</span>
+                <span class="text-white ml-2">{{ action.impact_risque }}</span>
+              </div>
+              <div>
+                <span class="text-slate-400">Effort estimé:</span>
+                <span class="text-white ml-2">{{ action.effort_estime }}</span>
+              </div>
+              <div>
+                <span class="text-slate-400">Délai recommandé:</span>
+                <span class="text-white ml-2">{{ action.delai_recommande }}</span>
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
-      <!-- Recommendations -->
-      <div v-if="weakCategories.length > 0" class="bg-slate-900/50 border border-slate-800 rounded-xl p-8 mb-8 shadow-xl animate-in fade-in slide-in-from-bottom-5 duration-700 delay-400">
-        <div class="flex items-center gap-3 mb-8">
-          <AlertTriangle class="w-6 h-6 text-yellow-400" />
-          <h2 class="text-white text-xl font-bold tracking-tight">Priorités d'amélioration</h2>
-        </div>
-
-        <div class="grid gap-4">
-          <div v-for="(cat, index) in weakCategories" :key="cat.category" class="flex items-center gap-4 p-5 bg-slate-800/50 rounded-xl border border-slate-700 hover:border-slate-600 transition-colors">
-            <div :class="`w-12 h-12 rounded-lg flex items-center justify-center flex-shrink-0 shadow-lg ${cat.score < 30 ? 'bg-red-500/20' : cat.score < 50 ? 'bg-orange-500/20' : 'bg-yellow-500/20'}`">
-              <component :is="index === 0 ? TrendingDown : AlertTriangle" :class="`w-6 h-6 ${cat.score < 30 ? 'text-red-400' : 'text-yellow-400'}`" />
-            </div>
-            <div class="flex-1">
-              <h3 class="text-white font-bold mb-1">{{ cat.category }}</h3>
-              <p class="text-slate-400 text-sm">
-                Score actuel : {{ cat.score }}% - Action prioritaire recommandée
-              </p>
-            </div>
-            <div :class="`px-4 py-1.5 rounded-lg text-sm font-bold shadow-inner ${cat.score < 30 ? 'bg-red-500/20 text-red-400' : cat.score < 50 ? 'bg-orange-500/20 text-orange-400' : 'bg-yellow-500/20 text-yellow-400'}`">
-              {{ cat.score }}%
-            </div>
-          </div>
-        </div>
+      <!-- Strategic Recommendations -->
+      <div v-if="reportData.recommandations_strategiques?.length" class="bg-slate-900 border border-slate-800 rounded-xl p-6">
+        <h3 class="text-xl font-semibold text-white mb-4 flex items-center gap-2">
+          <TrendingUp class="w-5 h-5 text-cyan-500" />
+          Recommandations stratégiques
+        </h3>
+        <ul class="space-y-3">
+          <li v-for="(reco, index) in reportData.recommandations_strategiques" :key="index" class="flex items-start gap-3">
+            <CheckCircle class="w-5 h-5 text-cyan-500 mt-0.5 flex-shrink-0" />
+            <span class="text-slate-300">{{ reco }}</span>
+          </li>
+        </ul>
       </div>
 
-      <!-- Success message -->
-      <div v-if="results.score >= 70" class="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-8 mb-8 animate-in fade-in duration-1000 delay-500">
-        <div class="flex items-start gap-4">
-          <div class="w-12 h-12 bg-emerald-500/20 rounded-full flex items-center justify-center flex-shrink-0">
-            <CheckCircle class="w-6 h-6 text-emerald-400" />
-          </div>
-          <div>
-            <h3 class="text-white text-xl font-bold mb-2">Félicitations !</h3>
-            <p class="text-slate-400 text-sm leading-relaxed max-w-3xl">
-              Votre organisation démontre un bon niveau de maturité en matière de {{ referential.name }}. 
-              Continuez à maintenir vos efforts et à améliorer les domaines identifiés pour atteindre l'excellence.
-            </p>
-          </div>
-        </div>
-      </div>
-
-      <!-- Actions -->
-      <div class="flex flex-wrap gap-4 justify-center mt-12 animate-in fade-in duration-1000 delay-700">
-        <button
-          @click="router.push('/audit-selection')"
-          class="px-8 py-4 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-xl font-bold hover:shadow-xl hover:shadow-cyan-500/30 transition-all scale-100 hover:scale-[1.02] active:scale-95"
-        >
-          Lancer un nouvel audit
-        </button>
-        <button
-          @click="router.push('/dashboard')"
-          class="px-8 py-4 border border-slate-700 text-slate-300 rounded-xl font-bold hover:border-slate-600 hover:bg-slate-900/50 transition-all"
-        >
-          Retour au tableau de bord
+      <!-- Download Report -->
+      <div class="text-center mt-12">
+        <button class="flex items-center gap-2 px-6 py-3 bg-cyan-500 hover:bg-cyan-600 text-white rounded-lg transition-colors mx-auto">
+          <Download class="w-4 h-4" />
+          Télécharger le rapport complet
         </button>
       </div>
     </div>

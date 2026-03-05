@@ -85,6 +85,7 @@ const handleSelectReferential = (referential: EnhancedReferential) => {
 
 const handleGenerateQuestionnaire = async () => {
   console.log("GENERATE QUESTIONNAIRE CLICKED")
+  isGenerating.value = true
   
   if (!selectedReferential.value) {
     console.log("NO SELECTED REFERENTIAL")
@@ -97,7 +98,7 @@ const handleGenerateQuestionnaire = async () => {
   }
   
   console.log("FORM VALIDATION PASSED")
-  isGenerating.value = true
+  
   try {
     const payload = {
       referentiel: getReferentialApiValue(selectedReferential.value.nom),
@@ -108,9 +109,9 @@ const handleGenerateQuestionnaire = async () => {
     
     console.log("PAYLOAD TO SEND:", payload)
     
-    await questionnaireStore.generateQuestionnaire(payload)
-    
-    console.log("QUESTIONNAIRE GENERATED SUCCESSFULLY ", questionnaireStore.generateQuestionnaire(payload))
+    const questionnaire = await questionnaireStore.generateQuestionnaire(payload)
+
+    console.log("QUESTIONNAIRE GENERATED SUCCESSFULLY", questionnaire)
     
     showContextModal.value = false
     resetForm()
