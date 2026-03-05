@@ -1,7 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { authService, type RegisterData, type RegisterResponse, type LoginData, type LoginResponse } from '@/services/auth'
-import { notificationService } from '@/services/notification'
 
 export const useAuthStore = defineStore('auth', () => {
   // State
@@ -38,9 +37,6 @@ export const useAuthStore = defineStore('auth', () => {
       const errorMessage = err instanceof Error ? err.message : 'Erreur lors de l\'inscription'
       error.value = errorMessage
       
-      // Afficher la notification d'erreur
-      notificationService.error(errorMessage)
-      
       throw err
     } finally {
       isLoading.value = false
@@ -63,9 +59,6 @@ export const useAuthStore = defineStore('auth', () => {
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Erreur lors de la connexion'
       error.value = errorMessage
-      
-      // Afficher la notification d'erreur
-      notificationService.error(errorMessage)
       
       throw err
     } finally {

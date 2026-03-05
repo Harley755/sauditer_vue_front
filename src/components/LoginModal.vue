@@ -2,8 +2,8 @@
 import { ref, watch } from 'vue'
 import { X, Mail, Lock, Shield, Loader2 } from 'lucide-vue-next'
 import { useAuthStore } from '@/stores/auth'
-import { useNotifications } from '@/composables/useNotifications'
 import { useFormValidation, commonRules } from '@/composables/useFormValidation'
+import { useToast } from '@/composables/useToast'
 
 interface Props {
   isOpen: boolean;
@@ -19,11 +19,13 @@ const emit = defineEmits<{
 }>()
 
 const authStore = useAuthStore()
-const { success, error, handleApiError } = useNotifications()
+
+const { success, error, info } = useToast()
 
 const email = ref('')
 const password = ref('')
 const isSubmitting = ref(false)
+
 
 // Pré-remplir l'email si fourni
 watch(() => props.prefilledEmail, (newEmail) => {
@@ -57,6 +59,7 @@ const handleSubmit = async () => {
   
   // Validate form
   if (!validateForm()) {
+    console.log('Validation failed - showing toast')
     error('Formulaire invalide', 'Veuillez corriger les erreurs ci-dessous')
     return
   }
@@ -71,14 +74,28 @@ const handleSubmit = async () => {
     })
     
     // Succès
+    console.log('Login successful - showing success toast')
     success('Connexion réussie !', 'Bienvenue dans CyberGRC')
     
     // Émettre l'événement de succès avec le type d'utilisateur
-    emit('success', response.user?.role?.toLowerCase() || 'manager')
+    const userRole = response.user?.role?.toLowerCase()
+    const validRole = userRole === 'citizen' || userRole === 'manager' || userRole === 'auditor' 
+      ? userRole 
+      : 'manager'
+    emit('success', validRole)
 
   } catch (err: any) {
-    // Gérer les erreurs avec le nouveau système
-    handleApiError(err)
+    // Gérer les erreurs avec vue-sonner
+    console.log('Login error:', err)
+    const errorMessage = 
+      err?.detail?.message ||
+      err?.response?.data?.message ||
+      err?.message ||
+      'Une erreur est survenue'
+    const errorDescription = 
+      err?.detail?.status_code ? `Erreur ${err.detail.status_code}` :
+      'Veuillez réessayer plus tard'
+    error(errorMessage, errorDescription)
   } finally {
     isSubmitting.value = false
   }
@@ -86,6 +103,7 @@ const handleSubmit = async () => {
 
 const handleGoogleLogin = () => {
   // TODO: Implémenter Google OAuth
+  success('Connexion Google réussie !', 'Bienvenue dans CyberGRC')
   emit('success', 'manager')
 }
 </script>

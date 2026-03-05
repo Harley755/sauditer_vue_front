@@ -3,7 +3,7 @@ import { ref } from 'vue'
 
 export interface AuditAnswer {
   questionId: string;
-  answer: 'yes' | 'no' | 'partial' | 'na';
+  answer: string; // Changé pour accepter n'importe quelle chaîne de l'API
   notes?: string;
 }
 
@@ -29,7 +29,9 @@ export const useAuditStore = defineStore('audit', () => {
     }
   }
 
-  const answerQuestion = (questionId: string, answer: 'yes' | 'no' | 'partial' | 'na', notes?: string) => {
+  const answerQuestion = (questionId: string, answer: string, notes?: string) => {
+    console.log("AUDIT STORE - ANSWER QUESTION:", { questionId, answer, notes })
+    
     if (!currentAudit.value) return
 
     const existingIndex = currentAudit.value.answers.findIndex(a => a.questionId === questionId)

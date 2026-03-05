@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { 
   Shield, 
@@ -10,24 +11,50 @@ import {
   AlertTriangle,
   BarChart3,
   LogOut,
-  User
+  User,
+  Loader2,
+  AlertCircle,
+  ChevronRight
 } from 'lucide-vue-next'
 import { useAuditStore } from '@/stores/audit'
-import { referentials } from '@/data/referentials'
-import { onMounted } from 'vue'
+import { useQuestionnaireStore } from '@/stores/questionnaireStore'
+import type { EnhancedReferential } from '@/types/questionnaire'
 
 const router = useRouter()
 const auditStore = useAuditStore()
+const questionnaireStore = useQuestionnaireStore()
 
-onMounted(() => {
-  if (!auditStore.isAuthenticated) {
-    router.push('/')
+const isInitialized = ref(false)
+
+onMounted(async () => {
+  // Temporairement désactivé pour permettre la navigation libre
+  // if (!auditStore.isAuthenticated) {
+  //   router.push('/')
+  //   return
+  // }
+  
+  try {
+    if (!questionnaireStore.hasReferentials) {
+      await questionnaireStore.fetchReferentials()
+    }
+  } catch (error) {
+    console.error('Failed to load referentials:', error)
+  } finally {
+    isInitialized.value = true
   }
 })
 
 const handleStartAudit = () => {
   router.push('/audit-selection')
 }
+
+const handleRetry = () => {
+  questionnaireStore.fetchReferentials()
+}
+
+const displayedReferentials = computed(() => {
+  return questionnaireStore.referentials.slice(0, 6) // Limiter à 6 pour l'affichage
+})
 
 const handleLogout = () => {
   auditStore.logout()
@@ -69,7 +96,7 @@ const stats = [
 </script>
 
 <template>
-  <div v-if="auditStore.isAuthenticated" class="min-h-screen bg-slate-950">
+  <div class="min-h-screen bg-slate-950">
     <!-- Header -->
     <nav class="border-b border-slate-800 bg-slate-900/50 backdrop-blur-sm sticky top-0 z-40">
       <div class="container mx-auto px-6 py-4">
@@ -78,7 +105,7 @@ const stats = [
             <div class="w-10 h-10 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-lg flex items-center justify-center">
               <Shield class="w-6 h-6 text-white" />
             </div>
-            <span class="text-white text-xl tracking-tight">CyberGRC</span>
+            <span class="text-white text-xl tracking-tight">Sauditer.bj</span>
           </div>
 
           <div class="flex items-center gap-4">
@@ -166,24 +193,78 @@ const stats = [
 
       <!-- Available Referentials -->
       <div class="animate-in fade-in slide-in-from-bottom-5 duration-700 delay-500">
-        <h2 class="text-white text-2xl mb-4 font-bold">Référentiels disponibles</h2>
-        <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-white text-2xl font-bold">Référentiels disponibles</h2>
+          <!-- <button
+            @click="handleStartAudit"
+            class="text-cyan-400 hover:text-cyan-300 transition-colors text-sm font-medium"
+          >
+            Voir tout →
+          </button> -->
+        </div>
+        
+        <!-- Loading State -->
+        <div v-if="!isInitialized || questionnaireStore.loading" class="flex items-center justify-center py-12">
+          <div class="flex flex-col items-center gap-4">
+            <Loader2 class="w-8 h-8 text-cyan-500 animate-spin" />
+            <p class="text-slate-400 text-sm">Chargement des référentiels...</p>
+          </div>
+        </div>
+        
+        <!-- Error State -->
+        <div v-else-if="questionnaireStore.error" class="bg-red-500/10 border border-red-500/20 rounded-xl p-6 mb-6">
+          <div class="flex gap-4">
+            <AlertCircle class="w-6 h-6 text-red-400 flex-shrink-0 mt-1" />
+            <div class="flex-1">
+              <h3 class="text-red-400 font-semibold mb-2">Erreur de chargement</h3>
+              <p class="text-slate-400 text-sm mb-4">{{ questionnaireStore.error }}</p>
+              <button
+                @click="handleRetry"
+                class="px-4 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg transition-colors text-sm"
+              >
+                Réessayer
+              </button>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Referentials Grid -->
+        <div v-else-if="displayedReferentials.length > 0" class="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
           <div
-            v-for="ref in referentials"
-            :key="ref.id"
-            class="bg-slate-900/50 border border-slate-800 rounded-xl p-6 hover:border-slate-700 transition-colors"
+            v-for="ref in displayedReferentials"
+            :key="ref.nom"
+            class="bg-slate-900/50 border border-slate-800 rounded-xl p-6 hover:border-cyan-500/50 transition-all group"
+            
           >
             <div class="flex items-start gap-4 mb-4">
-              <div class="text-4xl">{{ ref.icon }}</div>
+              <div :class="`w-12 h-12 bg-gradient-to-br ${ref.meta.color} rounded-lg flex items-center justify-center text-2xl shadow-lg`">
+                {{ ref.meta.icon }}
+              </div>
               <div class="flex-1">
-                <h3 class="text-white mb-1 font-semibold">{{ ref.name }}</h3>
-                <p class="text-slate-400 text-sm">{{ ref.description }}</p>
+                <h3 class="text-white mb-1 font-semibold group-hover:text-cyan-400 transition-colors">{{ ref.nom }}</h3>
+                <p class="text-slate-400 text-sm line-clamp-2">{{ ref.description }}</p>
               </div>
             </div>
             <div class="flex items-center justify-between text-sm text-slate-500">
-              <span>{{ ref.questions.length }} questions</span>
+              <span>Génération dynamique</span>
+              <ChevronRight class="w-4 h-4 group-hover:text-cyan-400 transition-colors" />
             </div>
           </div>
+        </div>
+        
+        <!-- Empty State -->
+        <div v-else class="text-center py-12">
+          <div class="w-16 h-16 bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Shield class="w-8 h-8 text-slate-600" />
+          </div>
+          <h3 class="text-white text-lg font-semibold mb-2">Aucun référentiel disponible</h3>
+          <p class="text-slate-400 text-sm mb-4">Les référentiels n'ont pas pu être chargés</p>
+          <button
+            @click="handleRetry"
+            class="px-4 py-2 bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-400 rounded-lg transition-colors text-sm"
+          >
+            Réessayer
+          </button>
         </div>
       </div>
     </div>

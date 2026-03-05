@@ -52,11 +52,13 @@ const handleSignupSuccess = (data: { userType: string; formData: any }) => {
 }
 
 const handleStartAudit = () => {
-  if (auditStore.isAuthenticated) {
-    router.push('/audit-selection')
-  } else {
-    isSignupOpen.value = true
-  }
+  // Temporairement désactivé pour permettre la navigation libre
+  // if (auditStore.isAuthenticated) {
+  //   router.push('/audit-selection')
+  // } else {
+  //   isSignupOpen.value = true
+  // }
+  router.push('/audit-selection')
 }
 </script>
 

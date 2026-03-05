@@ -1,5 +1,5 @@
 {
-  "name": "vite-react-app",
+  "name": "sauditer-front-app",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -90,7 +90,6 @@
     "vue": "^3.5.29",
     "vue-router": "^5.0.3",
     "vue-sonner": "^2.0.9",
-    "vue-toast-notification": "^3.1.3",
     "vue3-apexcharts": "^1.10.0",
     "zod": "^4.3.6"
   }
