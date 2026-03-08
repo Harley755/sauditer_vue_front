@@ -16,22 +16,21 @@ import {
   AlertCircle,
   ChevronRight
 } from 'lucide-vue-next'
-import { useAuditStore } from '@/stores/audit'
+import { useAuthStore } from '@/stores/auth'
 import { useQuestionnaireStore } from '@/stores/questionnaireStore'
 import type { EnhancedReferential } from '@/types/questionnaire'
 
 const router = useRouter()
-const auditStore = useAuditStore()
+const authStore = useAuthStore()
 const questionnaireStore = useQuestionnaireStore()
 
 const isInitialized = ref(false)
 
 onMounted(async () => {
-  // Temporairement désactivé pour permettre la navigation libre
-  // if (!auditStore.isAuthenticated) {
-  //   router.push('/')
-  //   return
-  // }
+  if (!authStore.isAuthenticated) {
+    router.push('/')
+    return
+  }
   
   try {
     if (!questionnaireStore.hasReferentials) {
@@ -57,7 +56,7 @@ const displayedReferentials = computed(() => {
 })
 
 const handleLogout = () => {
-  auditStore.logout()
+  authStore.logout()
   router.push('/')
 }
 
@@ -112,7 +111,7 @@ const stats = [
             <div class="flex items-center gap-2 px-4 py-2 bg-slate-800/50 rounded-lg border border-slate-700">
               <User class="w-4 h-4 text-slate-400" />
               <span class="text-slate-300 text-sm">
-                {{ auditStore.userType ? userTypeLabels[auditStore.userType] : 'Utilisateur' }}
+                {{ authStore.user?.first_name ? `${authStore.user.first_name} ${authStore.user.last_name}` : 'Utilisateur' }}
               </span>
             </div>
             <button

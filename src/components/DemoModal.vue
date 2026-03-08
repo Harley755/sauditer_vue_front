@@ -70,7 +70,7 @@ const handleSubmit = () => {
                     <Calendar class="w-7 h-7 text-white" />
                   </div>
                   <h2 class="text-white text-2xl mb-2 font-bold">Demander une démo</h2>
-                  <p class="text-slate-400 text-sm">Découvrez CyberGRC avec un expert en cybersécurité</p>
+                  <p class="text-slate-400 text-sm">Découvrez Sauditer.bj avec un expert en cybersécurité</p>
                 </div>
 
                 <!-- Form -->

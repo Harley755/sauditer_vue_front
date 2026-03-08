@@ -75,7 +75,7 @@ const handleSubmit = async () => {
     
     // Succès
     console.log('Login successful - showing success toast')
-    success('Connexion réussie !', 'Bienvenue dans CyberGRC')
+    success('Connexion réussie !', 'Bienvenue dans Sauditer.bj')
     
     // Émettre l'événement de succès avec le type d'utilisateur
     const userRole = response.user?.role?.toLowerCase()
@@ -103,7 +103,7 @@ const handleSubmit = async () => {
 
 const handleGoogleLogin = () => {
   // TODO: Implémenter Google OAuth
-  success('Connexion Google réussie !', 'Bienvenue dans CyberGRC')
+  success('Connexion Google réussie !', 'Bienvenue dans Sauditer.bj')
   emit('success', 'manager')
 }
 </script>

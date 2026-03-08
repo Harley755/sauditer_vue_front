@@ -28,8 +28,8 @@ export const useAuthStore = defineStore('auth', () => {
         localStorage.setItem('auth_token', response.token)
       }
       
-      if (response.user) {
-        user.value = response.user
+      if (response["data"]) {
+        user.value = response["data"]
       }
 
       return response
@@ -52,7 +52,7 @@ export const useAuthStore = defineStore('auth', () => {
       
       // Stocker le token et l'utilisateur
       token.value = response.token
-      user.value = response.user
+      user.value = response["data"]
       localStorage.setItem('auth_token', response.token)
       
       return response

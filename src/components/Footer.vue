@@ -39,7 +39,7 @@ const links = {
             <div class="w-10 h-10 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-lg flex items-center justify-center">
               <Shield class="w-6 h-6 text-white" />
             </div>
-            <span class="text-white text-xl tracking-tight">CyberGRC</span>
+            <span class="text-white text-xl tracking-tight">Sauditer.bj</span>
           </div>
           <p class="text-slate-400 mb-6 max-w-sm text-sm">
             La plateforme SaaS de référence pour l'auto-évaluation et la gestion GRC en cybersécurité
@@ -47,7 +47,7 @@ const links = {
           <div class="space-y-2 text-slate-400 text-sm">
             <div class="flex items-center gap-2">
               <Mail class="w-4 h-4 text-cyan-500" />
-              contact@cybergrc.com
+              contact@Sauditer.bj.com
             </div>
             <div class="flex items-center gap-2">
               <Phone class="w-4 h-4 text-cyan-500" />
@@ -87,7 +87,7 @@ const links = {
       <!-- Copyright -->
       <div class="pt-8 border-t border-slate-800 flex flex-col md:flex-row items-center justify-between gap-4">
         <p class="text-slate-400 text-sm">
-          © 2025 CyberGRC. Tous droits réservés.
+          © 2025 Sauditer.bj. Tous droits réservés.
         </p>
         <div class="flex gap-6">
           <a href="#" class="text-slate-400 hover:text-cyan-400 transition-colors text-sm">

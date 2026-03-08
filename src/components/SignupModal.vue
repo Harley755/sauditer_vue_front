@@ -161,7 +161,7 @@ const handleSubmit = async () => {
     await authStore.register(registerData)
     
     // Succès
-    success('Inscription réussie !', 'Bienvenue dans CyberGRC')
+    success('Inscription réussie !', 'Bienvenue dans Sauditer.bj')
     
     // Émettre l'événement de succès
     emit('success', {

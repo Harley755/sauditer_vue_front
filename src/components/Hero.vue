@@ -28,7 +28,7 @@ const props = defineProps<Props>()
           <div class="w-10 h-10 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-lg flex items-center justify-center">
             <Shield class="w-6 h-6 text-white" />
           </div>
-          <span class="text-white text-xl tracking-tight">CyberGRC</span>
+          <span class="text-white text-xl tracking-tight">Sauditer.bj</span>
         </div>
 
         <div class="flex items-center gap-4 animate-in fade-in slide-in-from-right-5 duration-700">

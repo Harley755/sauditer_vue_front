@@ -6,7 +6,7 @@ const testimonials = [
     name: 'Sophie Durand',
     role: 'RSSI - Groupe Financier',
     company: 'BanquePlus',
-    content: 'CyberGRC a transformé notre approche de la conformité. Nous avons réduit de 60% le temps consacré aux audits tout en améliorant notre posture de sécurité.',
+    content: 'Sauditer.bj a transformé notre approche de la conformité. Nous avons réduit de 60% le temps consacré aux audits tout en améliorant notre posture de sécurité.',
     rating: 5,
     avatar: 'SD'
   },
@@ -38,7 +38,7 @@ const testimonials = [
           Ils nous font confiance
         </h2>
         <p class="text-slate-400 text-lg max-w-2xl mx-auto">
-          Découvrez comment CyberGRC aide les organisations à sécuriser leurs activités
+          Découvrez comment Sauditer.bj aide les organisations à sécuriser leurs activités
         </p>
       </div>
 
