@@ -46,15 +46,44 @@ const router = createRouter({
   ]
 })
 
-// Route guard pour protéger les routes nécessitant une authentification
-router.beforeEach((to, from, next) => {
+// Route guard avec initialisation et rafraîchissement automatique
+router.beforeEach(async (to, from, next) => {
   const authStore = useAuthStore()
   
-  if (to.meta.requiresAuth && !authStore.isAuthenticated) {
-    next('/')
-  } else {
+  // Si on va vers la page d'accueil, toujours autoriser
+  if (to.path === '/') {
     next()
+    return
   }
+  
+  // Pour les routes protégées, vérifier l'authentification
+  if (to.meta.requiresAuth) {
+    // Si pas authentifié, tenter de restaurer la session
+    if (!authStore.isAuthenticated) {
+      console.log('Utilisateur non authentifié, tentative de restauration...')
+      
+      // D'abord essayer de récupérer les infos utilisateur
+      const initialized = await authStore.initAuth()
+      
+      if (!initialized) {
+        console.log('initAuth échoué, essai de refresh...')
+        // Si initAuth échoue, essayer refresh
+        const refreshed = await authStore.refreshAuth()
+        
+        if (!refreshed) {
+          console.log('refresh échoué, redirection vers login')
+          next('/')
+          return
+        }
+        
+        console.log('refresh réussi')
+      } else {
+        console.log('initAuth réussi')
+      }
+    }
+  }
+  
+  next()
 })
 
 const app = createApp(App)
@@ -64,6 +93,6 @@ app.use(router)
 
 // Initialiser l'authentification avant de monter l'app
 const authStore = useAuthStore()
-authStore.initAuth()
-
-app.mount('#app')
+authStore.initAuth().then(() => {
+  app.mount('#app')
+})

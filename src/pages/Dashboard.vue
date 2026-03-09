@@ -55,8 +55,8 @@ const displayedReferentials = computed(() => {
   return questionnaireStore.referentials.slice(0, 6) // Limiter à 6 pour l'affichage
 })
 
-const handleLogout = () => {
-  authStore.logout()
+const handleLogout = async () => {
+  await authStore.logout()
   router.push('/')
 }
 
@@ -111,7 +111,7 @@ const stats = [
             <div class="flex items-center gap-2 px-4 py-2 bg-slate-800/50 rounded-lg border border-slate-700">
               <User class="w-4 h-4 text-slate-400" />
               <span class="text-slate-300 text-sm">
-                {{ authStore.user?.first_name ? `${authStore.user.first_name} ${authStore.user.last_name}` : 'Utilisateur' }}
+                {{ authStore.userFullName || 'Utilisateur' }}
               </span>
             </div>
             <button

@@ -78,7 +78,7 @@ const handleSubmit = async () => {
     success('Connexion réussie !', 'Bienvenue dans Sauditer.bj')
     
     // Émettre l'événement de succès avec le type d'utilisateur
-    const userRole = response.user?.role?.toLowerCase()
+    const userRole = authStore.userRole
     const validRole = userRole === 'citizen' || userRole === 'manager' || userRole === 'auditor' 
       ? userRole 
       : 'manager'

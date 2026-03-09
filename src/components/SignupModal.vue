@@ -150,8 +150,8 @@ const handleSubmit = async () => {
   try {
     // Préparer les données pour l'API
     const registerData = {
-      firstname: formData.value.firstName,
-      lastname: formData.value.lastName,
+      first_name: formData.value.firstName,
+      first_name: formData.value.lastName,
       email: formData.value.email,
       password: formData.value.password,
       role_id: formData.value.role_id

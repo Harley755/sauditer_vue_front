@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { useAuditStore } from '@/stores/audit'
+import { useAuthStore } from '@/stores/auth'
 import Hero from '@/components/Hero.vue'
 import Features from '@/components/Features.vue'
 import UserTypes from '@/components/UserTypes.vue'
@@ -15,7 +15,7 @@ import SignupModal from '@/components/SignupModal.vue'
 import DemoModal from '@/components/DemoModal.vue'
 
 const router = useRouter()
-const auditStore = useAuditStore()
+const authStore = useAuthStore()
 
 const isLoginOpen = ref(false)
 const isSignupOpen = ref(false)
@@ -29,7 +29,6 @@ const handleSignup = (userType: 'citizen' | 'manager' | 'auditor') => {
 }
 
 const handleLoginSuccess = (userType: 'citizen' | 'manager' | 'auditor') => {
-  auditStore.login(userType)
   isLoginOpen.value = false
   prefilledLoginEmail.value = ''  // Réinitialiser l'email pré-rempli
   router.push('/dashboard')
@@ -52,13 +51,11 @@ const handleSignupSuccess = (data: { userType: string; formData: any }) => {
 }
 
 const handleStartAudit = () => {
-  // Temporairement désactivé pour permettre la navigation libre
-  // if (auditStore.isAuthenticated) {
-  //   router.push('/audit-selection')
-  // } else {
-  //   isSignupOpen.value = true
-  // }
-  router.push('/audit-selection')
+  if (authStore.isAuthenticated) {
+    router.push('/audit-selection')
+  } else {
+    isSignupOpen.value = true
+  }
 }
 </script>
 
