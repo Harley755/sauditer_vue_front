@@ -101,7 +101,7 @@ const handleGenerateQuestionnaire = async () => {
   
   try {
     const payload = {
-      referentiel: getReferentialApiValue(selectedReferential.value.nom),
+      referentiel_id: selectedReferential.value.id,
       secteur: contextForm.value.secteur.trim(),
       taille: contextForm.value.taille,
       niveau_estime: contextForm.value.niveau_estime

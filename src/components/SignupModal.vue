@@ -151,15 +151,26 @@ const handleSubmit = async () => {
     // Préparer les données pour l'API
     const registerData = {
       first_name: formData.value.firstName,
-      first_name: formData.value.lastName,
+      last_name: formData.value.lastName,
       email: formData.value.email,
       password: formData.value.password,
-      role_id: formData.value.role_id
+      role_id: formData.value.role_id,
+      organisation: formData.value.organization
     }
 
     // Appeler l'API d'inscription
     await authStore.register(registerData)
     
+    // delete inputs values
+    formData.value = {
+      firstName: '',
+      lastName: '',
+      email: '',
+      password: '',
+      role_id: '',
+      organization: ''
+    }
+
     // Succès
     success('Inscription réussie !', 'Bienvenue dans Sauditer.bj')
     

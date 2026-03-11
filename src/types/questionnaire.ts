@@ -1,4 +1,5 @@
 export interface APIReferential {
+  id: string;
   nom: string;
   description: string;
 }
@@ -17,7 +18,8 @@ export interface Question {
 
 export interface Questionnaire {
   id: string;
-  referentiel: string;
+  referentiel_id: string;
+  referentiel?: APIReferential;
   secteur: string;
   taille_organisation: string;
   niveau_cible: string;
@@ -27,7 +29,7 @@ export interface Questionnaire {
 }
 
 export interface QuestionnaireRequest {
-  referentiel: string;
+  referentiel_id: string;
   secteur: string;
   taille: string;
   niveau_estime: string;

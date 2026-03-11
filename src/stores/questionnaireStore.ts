@@ -53,6 +53,10 @@ export const useQuestionnaireStore = defineStore('questionnaire', () => {
     return referentials.value.find(ref => ref.nom === name);
   };
 
+  const getReferentialById = (id: string): EnhancedReferential | undefined => {
+    return referentials.value.find(ref => ref.id === id);
+  };
+
   const getQuestionById = (questionId: string) => {
     return currentQuestionnaire.value?.questions.find(q => q.id === questionId);
   };
@@ -72,6 +76,7 @@ export const useQuestionnaireStore = defineStore('questionnaire', () => {
     generateQuestionnaire,
     resetQuestionnaire,
     getReferentialByName,
+    getReferentialById,
     getQuestionById,
     retryLastOperation
   };

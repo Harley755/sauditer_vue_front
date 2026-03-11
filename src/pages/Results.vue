@@ -20,6 +20,14 @@ import VueApexCharts from "vue3-apexcharts"
 const router = useRouter()
 const route = useRoute()
 
+// Importer directement le store pour éviter les problèmes d'import
+import { useAuthStore } from '@/stores/auth'
+const authStore = useAuthStore()
+
+// Récupérer le questionnaireStore pour le référentiel
+import { useQuestionnaireStore } from '@/stores/questionnaireStore'
+const questionnaireStore = useQuestionnaireStore()
+
 /* ---------------- STATE ---------------- */
 
 const loading = ref(true)
@@ -43,6 +51,55 @@ const API_BASE_URL =
 const questionnaireId = computed(
   () => route.query.questionnaire_id as string
 )
+
+const referentielName = ref('RGPD')
+
+async function fetchReferentielName() {
+  try {
+    const headers: HeadersInit = {
+      'Content-Type': 'application/json'
+    }
+    
+    if (authStore.user?.id) {
+      headers['x-user-id'] = authStore.user.id
+    }
+    
+    const response = await fetch(`${API_BASE_URL}/api/v1/questionnaires/referentiels/name/${questionnaireId.value}`, {
+      method: "GET",
+      // headers: headers
+    })
+
+    if (!response.ok) throw new Error("Referentiel name fetch failed")
+
+    const data = await response.json()
+    referentielName.value = data.referentiel_name || ' '
+    
+  } catch (error) {
+    console.error('Failed to fetch referentiel name:', error)
+    // Garder la valeur par défaut en cas d'erreur
+  }
+}
+
+async function initializeResults() {
+  try {
+    // Charger le nom du référentiel
+    await fetchReferentielName()
+    
+    const score = await fetchScore()
+
+    if (score) {
+      scoreData.value = score
+      reportData.value = await fetchReport()
+
+      loading.value = false
+    } else {
+      startPolling()
+    }
+  } catch {
+    error.value = "Erreur chargement résultats"
+    loading.value = false
+  }
+}
 
 /* ---------------- SCORE LEVEL ---------------- */
 
@@ -94,14 +151,20 @@ const scoreLevel = computed(() => {
 /* ---------------- API ---------------- */
 
 async function fetchScore() {
+  // Créer les headers avec le user_id dynamique
+  const headers: HeadersInit = {
+    'Content-Type': 'application/json'
+  }
+  
+  // Ajouter le user_id si l'utilisateur est connecté
+  if (authStore.user?.id) {
+    headers['x-user-id'] = authStore.user.id
+  }
+  
   const res = await fetch(
     `${API_BASE_URL}/api/v1/scores/score/${questionnaireId.value}`,
     {
-      headers: {
-        "Content-Type": "application/json",
-        "X-User-Id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-        questionnaire_id: questionnaireId.value
-      }
+      headers: headers
     }
   )
 
@@ -112,20 +175,27 @@ async function fetchScore() {
 }
 
 async function fetchReport() {
+  // Créer les headers avec le user_id dynamique
+  const headers: HeadersInit = {
+    'Content-Type': 'application/json'
+  }
+  
+  // Ajouter le user_id si l'utilisateur est connecté
+  if (authStore.user?.id) {
+    headers['x-user-id'] = authStore.user.id
+  }
+  
   const res = await fetch(
     `${API_BASE_URL}/api/v1/reports/report/${questionnaireId.value}`,
     {
-      headers: {
-        "Content-Type": "application/json",
-        "X-User-Id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-        questionnaire_id: questionnaireId.value
-      }
+      headers: headers
     }
   )
 
-  if (!res.ok) throw new Error("Report fetch failed")
-
-  return await res.json()
+  if (!res.ok) throw new Error("Report fetch failed") 
+    const data = await res.json()
+    console.log(data)
+    return data
 }
 
 /* ---------------- POLLING ---------------- */
@@ -170,24 +240,6 @@ function startPolling() {
   }, 60000)
 }
 
-async function initializeResults() {
-  try {
-    const score = await fetchScore()
-
-    if (score) {
-      scoreData.value = score
-      reportData.value = await fetchReport()
-
-      loading.value = false
-    } else {
-      startPolling()
-    }
-  } catch {
-    error.value = "Erreur chargement résultats"
-    loading.value = false
-  }
-}
-
 async function retryAnalysis() {
   error.value = null
   retryCount.value = 0
@@ -195,14 +247,21 @@ async function retryAnalysis() {
   loading.value = true
   analysisRunning.value = true
 
+  // Créer les headers avec le user_id dynamique
+  const headers: HeadersInit = {
+    'Content-Type': 'application/json'
+  }
+  
+  // Ajouter le user_id si l'utilisateur est connecté
+  if (authStore.user?.id) {
+    headers['x-user-id'] = authStore.user.id
+  }
+
   await fetch(
     `${API_BASE_URL}/api/v1/questionnaires/${questionnaireId.value}/reanalyze`,
     {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-User-Id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
-      }
+      headers: headers
     }
   )
 
@@ -219,7 +278,7 @@ const results = computed(() => {
   Object.entries(reportData.value.radar_par_domaine).forEach(
     ([category, score]: any) => {
       categoryScores[category] = {
-        score,
+        score: Math.round(score),  // ← ARRONDI
         total: 100,
         questions: 1
       }
@@ -227,7 +286,7 @@ const results = computed(() => {
   )
 
   return {
-    score: scoreData.value.score_global,
+    score: Math.round(scoreData.value.score_global),  // ← ARRONDI
 
     scoreLevel: scoreLevel.value,
 
@@ -277,7 +336,7 @@ const barChartSeries = computed(() => {
   if (!results.value) return []
 
   const data = Object.values(results.value.categoryScores).map(
-    (d: any) => d.score ?? 0
+    (d: any) => Math.round(d.score ?? 0)  // ← ARRONDI
   )
 
   return [
@@ -342,7 +401,7 @@ const weakCategories = computed(() => {
   return Object.entries(results.value.categoryScores)
     .map(([category, data]: any) => ({
       category,
-      score: data.score
+      score: Math.round(data.score)  // ← ARRONDI
     }))
     .filter((c) => c.score < 70)
     .sort((a, b) => a.score - b.score)
@@ -409,7 +468,7 @@ onUnmounted(stopPolling)
               stroke="#06b6d4"
               stroke-width="10"
               fill="none"
-              :stroke-dasharray="`${(results.score / 100) * 440} 440`"
+              :stroke-dasharray="`${(Math.round(results.score) / 100) * 440} 440`"
               stroke-linecap="round"
             />
           </svg>
@@ -417,7 +476,7 @@ onUnmounted(stopPolling)
           <div
             class="absolute inset-0 flex items-center justify-center text-white text-4xl font-bold"
           >
-            {{ results.score }}
+            {{ Math.round(results.score) }} %
           </div>
         </div>
 
@@ -425,7 +484,7 @@ onUnmounted(stopPolling)
 
         <div>
           <h1 class="text-white text-3xl font-bold mb-2">
-            RGPD
+            {{ referentielName }}
           </h1>
 
           <div
@@ -439,7 +498,7 @@ onUnmounted(stopPolling)
 
           <p class="text-slate-400 mb-4">
             {{
-              results.score >= 70
+              Math.round(results.score) >= 70
                 ? "Bon niveau de conformité."
                 : "Conformité faible. Des mesures urgentes doivent être prises."
             }}
@@ -485,7 +544,7 @@ onUnmounted(stopPolling)
           />
         </div>
 
-        <div class="bg-slate-900 border border-slate-800 rounded-xl p-8">
+        <!-- <div class="bg-slate-900 border border-slate-800 rounded-xl p-8">
           <div class="flex items-center gap-3 mb-6">
             <PieChart class="w-6 h-6 text-cyan-400" />
             <h2 class="text-white text-xl font-bold">
@@ -500,7 +559,7 @@ onUnmounted(stopPolling)
             :options="pieChartOptions"
             :series="pieChartSeries"
           />
-        </div>
+        </div> -->
 
       </div>
 
@@ -530,12 +589,12 @@ onUnmounted(stopPolling)
               </h3>
 
               <p class="text-slate-400 text-sm">
-                Score actuel : {{ cat.score }}%
+                Score actuel : {{ Math.round(cat.score) }}%
               </p>
             </div>
 
             <div class="text-red-400 font-bold">
-              {{ cat.score }}%
+              {{ Math.round(cat.score) }}%
             </div>
           </div>
 

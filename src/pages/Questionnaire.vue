@@ -14,11 +14,13 @@ import {
 } from 'lucide-vue-next'
 import { useAuditStore } from '@/stores/audit'
 import { useQuestionnaireStore } from '@/stores/questionnaireStore'
+import { useAuthStore } from '@/stores/auth'
 import { questionnaireService } from '@/services/questionnaireService'
 
 const router = useRouter()
 const auditStore = useAuditStore()
 const questionnaireStore = useQuestionnaireStore()
+const authStore = useAuthStore()  // ← AJOUT CRUCIAL
 
 const currentQuestionIndex = ref(0)
 const selectedValue = ref<string | null>(null)
@@ -64,8 +66,8 @@ const isQualitative = computed(() => {
 const referentialMeta = computed(() => {
   if (!currentQuestionnaire.value) return null
   return {
-    icon: questionnaireService.getReferentialIcon(currentQuestionnaire.value.referentiel),
-    name: currentQuestionnaire.value.referentiel
+    icon: questionnaireService.getReferentialIcon(currentQuestionnaire.value.referentiel?.nom || ''),
+    name: currentQuestionnaire.value.referentiel?.nom || ''
   }
 })
 
@@ -81,8 +83,8 @@ onMounted(() => {
   
   // Initialiser l'audit automatiquement si ce n'est pas déjà fait
   if (!auditStore.currentAudit) {
-    console.log("INITIALIZING NEW AUDIT FOR:", currentQuestionnaire.value.referentiel)
-    auditStore.startAudit(currentQuestionnaire.value.referentiel)
+    console.log("INITIALIZING NEW AUDIT FOR:", currentQuestionnaire.value.referentiel?.nom)
+    auditStore.startAudit(currentQuestionnaire.value.referentiel?.nom || '')
   } else {
     console.log("AUDIT ALREADY EXISTS:", auditStore.currentAudit)
   }
@@ -102,7 +104,7 @@ watch(currentQuestionnaire, (questionnaire) => {
   if (!questionnaire) return
 
   console.log("===== QUESTIONNAIRE CHARGÉ =====")
-  console.log("Référentiel :", questionnaire.referentiel)
+  console.log("Référentiel :", questionnaire.referentiel?.nom)
   console.log("Nombre de questions :", questionnaire.questions.length)
 
   console.log("===== LISTE DES QUESTIONS =====")
@@ -176,12 +178,19 @@ async function submitAnswers(payload: any) {
   const API_BASE_URL = (import.meta.env?.VITE_API_BASE_URL as string) || 'http://localhost:8001'
   
   try {
+    // Créer les headers avec le user_id dynamique
+    const headers: HeadersInit = {
+      'Content-Type': 'application/json'
+    }
+    
+    // Ajouter le user_id si l'utilisateur est connecté
+    if (authStore.user?.id) {
+      headers['x-user-id'] = authStore.user.id
+    }
+    
     const response = await fetch(`${API_BASE_URL}/api/v1/questionnaires/submit-answers`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-user-id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
-      },
+      headers: headers,
       body: JSON.stringify(payload)
     })
 
@@ -281,6 +290,7 @@ const handleNext = () => {
 
     const payload = {
       questionnaire_id: questionnaireStore.currentQuestionnaire?.id || '',
+      user_id: authStore.user?.id || '',  // ← AJOUT CRUCIAL
       reponses
     }
 
