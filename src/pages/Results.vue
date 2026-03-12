@@ -240,6 +240,42 @@ function startPolling() {
   }, 60000)
 }
 
+async function exportPDF() {
+  try {
+    const headers: HeadersInit = {
+      'Content-Type': 'application/json'
+    }
+    
+    if (authStore.user?.id) {
+      headers['x-user-id'] = authStore.user.id
+    }
+    
+    // Utiliser la route GET existante avec le questionnaire_id
+    const response = await fetch(`${API_BASE_URL}/api/v1/reports/report/${questionnaireId.value}/export?format=pdf`, {
+      method: "GET",
+      headers: headers
+    })
+
+    if (!response.ok) throw new Error("PDF export failed")
+
+    console.log(response)
+    // Créer un blob et télécharger le fichier
+    const blob = await response.blob()
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `rapport_audit_cybersecurite_${questionnaireId.value}.pdf`
+    document.body.appendChild(a)
+    a.click()
+    window.URL.revokeObjectURL(url)
+    document.body.removeChild(a)
+    
+  } catch (error) {
+    console.error('Failed to export PDF:', error)
+    // Optionnel: afficher une notification d'erreur
+  }
+}
+
 async function retryAnalysis() {
   error.value = null
   retryCount.value = 0
@@ -435,6 +471,7 @@ onUnmounted(stopPolling)
         </button>
 
         <button
+          @click="exportPDF"
           class="px-4 py-2 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-lg flex items-center gap-2"
         >
           <Download class="w-4 h-4" />
