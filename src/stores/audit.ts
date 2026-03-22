@@ -27,8 +27,8 @@ export const useAuditStore = defineStore('audit', () => {
     if (saved) {
       const parsed = JSON.parse(saved)
 
-      // 🔹 vérifier que c'est le même référentiel
-      if (parsed.referentialId === referentialId) {
+      // 🔹 vérifier que c'est le même référentiel ET que l'audit n'est pas complété
+      if (parsed.referentialId === referentialId && !parsed.completedAt) {
 
         parsed.startedAt = new Date(parsed.startedAt)
         if (parsed.completedAt) {
@@ -40,7 +40,7 @@ export const useAuditStore = defineStore('audit', () => {
       }
     }
 
-    // nouvelle session
+    // nouvelle session (ou si l'audit précédent est complété)
     currentAudit.value = {
       referentialId,
       answers: [],
@@ -100,14 +100,11 @@ export const useAuditStore = defineStore('audit', () => {
 
     currentAudit.value.completedAt = new Date()
 
-    // sauvegarder l'état final
-    localStorage.setItem(
-      "audit-session",
-      JSON.stringify(currentAudit.value)
-    )
-
-    // supprimer la session active
+    // supprimer la session active (plus besoin de la garder)
     localStorage.removeItem("audit-session")
+    
+    // Optionnel: réinitialiser le store
+    currentAudit.value = null
   }
 
   const login = (type: 'citizen' | 'manager' | 'auditor') => {
@@ -121,6 +118,11 @@ export const useAuditStore = defineStore('audit', () => {
     currentAudit.value = null
   }
 
+  const clearCorruptedSession = () => {
+    localStorage.removeItem("audit-session")
+    currentAudit.value = null
+  }
+
   return {
     currentAudit,
     isAuthenticated,
@@ -129,6 +131,7 @@ export const useAuditStore = defineStore('audit', () => {
     answerQuestion,
     completeAudit,
     login,
-    logout
+    logout,
+    clearCorruptedSession
   }
 })

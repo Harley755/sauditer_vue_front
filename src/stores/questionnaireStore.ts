@@ -61,6 +61,11 @@ export const useQuestionnaireStore = defineStore('questionnaire', () => {
     return currentQuestionnaire.value?.questions.find(q => q.id === questionId);
   };
 
+  const clearCurrentQuestionnaire = (): void => {
+    console.log("🧹 Vidage du questionnaire courant de Pinia")
+    currentQuestionnaire.value = null
+  };
+
   const retryLastOperation = (): void => {
     error.value = null;
   };
@@ -75,6 +80,7 @@ export const useQuestionnaireStore = defineStore('questionnaire', () => {
     fetchReferentials,
     generateQuestionnaire,
     resetQuestionnaire,
+    clearCurrentQuestionnaire,
     getReferentialByName,
     getReferentialById,
     getQuestionById,

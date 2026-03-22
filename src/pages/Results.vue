@@ -276,6 +276,16 @@ async function exportPDF() {
   }
 }
 
+function goToDashboard() {
+  console.log("🧹 Retour au tableau de bord avec nettoyage de Pinia")
+  
+  // Vider les questionnaires et audits de Pinia avant de retourner au dashboard
+  questionnaireStore.clearCurrentQuestionnaire()
+  // auditStore.clearAudit()
+  
+  router.push('/dashboard')
+}
+
 async function retryAnalysis() {
   error.value = null
   retryCount.value = 0
@@ -463,7 +473,7 @@ onUnmounted(stopPolling)
 
       <div class="flex items-center justify-between mb-8">
         <button
-          @click="router.push('/dashboard')"
+          @click="goToDashboard"
           class="flex items-center gap-2 text-slate-400 hover:text-white"
         >
           <ArrowLeft class="w-4 h-4" />

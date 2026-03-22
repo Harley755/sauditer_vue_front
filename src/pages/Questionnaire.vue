@@ -81,6 +81,12 @@ onMounted(() => {
     return
   }
   
+  // Détection de session corrompue
+  if (auditStore.currentAudit && auditStore.currentAudit.answers.length > currentQuestionnaire.value.questions.length) {
+    console.log("DETECTING CORRUPTED SESSION - CLEARING")
+    auditStore.clearCorruptedSession()
+  }
+  
   // Initialiser l'audit automatiquement si ce n'est pas déjà fait
   if (!auditStore.currentAudit) {
     console.log("INITIALIZING NEW AUDIT FOR:", currentQuestionnaire.value.referentiel?.nom)
@@ -265,6 +271,8 @@ const handleNext = () => {
     // Vérifier que toutes les questions ont une réponse
     const totalQuestions = questionnaireStore.currentQuestionnaire?.questions.length || 0
     const totalAnswers = auditStore.currentAudit?.answers.length || 0
+
+    console.log("VALIDATION:", { totalQuestions, totalAnswers })
 
     if (totalAnswers !== totalQuestions) {
       alert("Veuillez répondre à toutes les questions avant de terminer l'audit.")
