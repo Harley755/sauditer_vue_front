@@ -292,7 +292,7 @@ onMounted(() => {
                           :style="`width: ${audit.score_global}%`"
                         ></div>
                       </div>
-                      <span class="text-slate-300 text-sm font-medium">{{ audit.score_global }}%</span>
+                      <span class="text-slate-300 text-sm font-medium">{{ Math.round(audit.score_global) }}%</span>
                     </div>
                   </div>
                 </div>
