@@ -44,6 +44,24 @@ export const useQuestionnaireStore = defineStore('questionnaire', () => {
     }
   };
 
+  const loadQuestionnaireWithAnswers = async (questionnaireId: string): Promise<void> => {
+    console.log("STORE LOAD QUESTIONNAIRE WITH ANSWERS", questionnaireId)
+    
+    loading.value = true;
+    error.value = null;
+    
+    try {
+      currentQuestionnaire.value = await questionnaireService.getQuestionnaireWithAnswers(questionnaireId);
+      console.log("STORE QUESTIONNAIRE WITH ANSWERS SET:", currentQuestionnaire.value)
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : 'Une erreur est survenue';
+      console.error('Failed to load questionnaire with answers:', err);
+      throw err;
+    } finally {
+      loading.value = false;
+    }
+  };
+
   const resetQuestionnaire = (): void => {
     currentQuestionnaire.value = null;
     error.value = null;
@@ -79,6 +97,7 @@ export const useQuestionnaireStore = defineStore('questionnaire', () => {
     hasCurrentQuestionnaire,
     fetchReferentials,
     generateQuestionnaire,
+    loadQuestionnaireWithAnswers,
     resetQuestionnaire,
     clearCurrentQuestionnaire,
     getReferentialByName,

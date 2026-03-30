@@ -43,6 +43,13 @@ let pollingTimeout: any = null
 
 const retryCount = ref(0)
 
+// Récupérer le total des questions depuis le store
+const totalQuestionsFromStore = computed(() => {
+  console.log("📊 questionnaireStore.currentQuestionnaire:", questionnaireStore.currentQuestionnaire)
+  console.log("📊 questions.length:", questionnaireStore.currentQuestionnaire?.questions.length)
+  return questionnaireStore.currentQuestionnaire?.questions.length || 0
+})
+
 /* ---------------- CONFIG ---------------- */
 
 const API_BASE_URL =
@@ -554,7 +561,7 @@ onUnmounted(stopPolling)
           <div class="flex gap-6 text-slate-400 text-sm">
             <div class="flex gap-2 items-center">
               <FileText class="w-4 h-4 text-cyan-400" />
-              {{ results.answeredQuestions }} / {{ results.totalQuestions }} questions
+              {{ results.answeredQuestions }} / {{ totalQuestionsFromStore || results.totalQuestions }} questions
             </div>
 
             <div class="flex gap-2 items-center">

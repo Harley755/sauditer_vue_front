@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, watchEffect } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, watchEffect } from 'vue'
 import { useRouter } from 'vue-router'
 import { 
   ArrowLeft, 
@@ -16,6 +16,7 @@ import { useAuditStore } from '@/stores/audit'
 import { useQuestionnaireStore } from '@/stores/questionnaireStore'
 import { useAuthStore } from '@/stores/auth'
 import { questionnaireService } from '@/services/questionnaireService'
+import { questionnaireAPI } from '@/api/questionnaires'
 
 const router = useRouter()
 const auditStore = useAuditStore()
@@ -28,6 +29,9 @@ const textAnswer = ref('')
 const notes = ref('')
 const showNotes = ref(false)
 const isInitialized = ref(false)
+const isOnline = ref(true)
+const showSyncStatus = ref(false)
+const syncMessage = ref('')
 
 // Computed properties dynamiques
 const isLoading = computed(() => questionnaireStore.loading)
@@ -71,15 +75,51 @@ const referentialMeta = computed(() => {
   }
 })
 
-onMounted(() => {
-  console.log("QUESTIONNAIRE MOUNTED:", currentQuestionnaire.value)
-  console.dir("QUESTIONNAIRE COMPLET:", currentQuestionnaire.value)
+onMounted(async () => {
+  console.log("QUESTIONNAIRE MOUNTED")
   
-  if (!currentQuestionnaire.value) {
-    console.log("NO QUESTIONNAIRE - REDIRECTING")
-    router.push('/audit-selection')
-    return
+  // Vérifier la connectivité au démarrage
+  isOnline.value = await auditStore.checkConnectivity()
+  
+  // Vérifier si on a un questionnaire_id dans l'URL (pour continuer un audit)
+  const urlParams = new URLSearchParams(window.location.search)
+  const questionnaireId = urlParams.get('questionnaire_id')
+  
+  if (questionnaireId) {
+    console.log("CONTINUING AUDIT WITH ID:", questionnaireId)
+    
+    try {
+      // Charger le questionnaire avec les réponses existantes depuis le backend
+      await questionnaireStore.loadQuestionnaireWithAnswers(questionnaireId)
+      console.log("QUESTIONNAIRE WITH ANSWERS LOADED:", questionnaireStore.currentQuestionnaire)
+      
+      // Synchroniser les réponses locales avec le backend
+      await syncLocalAnswersWithBackend(questionnaireId)
+    } catch (error) {
+      console.error("ERROR LOADING QUESTIONNAIRE WITH ANSWERS:", error)
+      
+      // Mode dégradé : essayer de récupérer depuis localStorage
+      if (!await loadQuestionnaireFromLocalStorage(questionnaireId)) {
+        // Si même le localStorage échoue, rediriger
+        router.push('/audit-selection')
+        return
+      }
+    }
+  } else {
+    console.log("NO QUESTIONNAIRE ID - CHECKING STORE")
+    
+    if (!currentQuestionnaire.value) {
+      console.log("NO QUESTIONNAIRE IN STORE - REDIRECTING")
+      router.push('/audit-selection')
+      return
+    }
+    
+    // NOUVEAU QUESTIONNAIRE : l'ID est déjà créé depuis AuditSelection.vue
+    // Plus besoin de recréer le questionnaire, il existe déjà
+    console.log("✅ Questionnaire ID déjà disponible:", currentQuestionnaire.value.id)
   }
+  
+  console.log("QUESTIONNAIRE COMPLET:", currentQuestionnaire.value)
   
   // Détection de session corrompue
   if (auditStore.currentAudit && auditStore.currentAudit.answers.length > currentQuestionnaire.value.questions.length) {
@@ -89,11 +129,36 @@ onMounted(() => {
   
   // Initialiser l'audit automatiquement si ce n'est pas déjà fait
   if (!auditStore.currentAudit) {
-    console.log("INITIALIZING NEW AUDIT FOR:", currentQuestionnaire.value.referentiel?.nom)
-    auditStore.startAudit(currentQuestionnaire.value.referentiel?.nom || '')
+    console.log("INITIALIZING NEW AUDIT FOR QUESTIONNAIRE:", currentQuestionnaire.value.id)
+    auditStore.startAudit(currentQuestionnaire.value.id)
   } else {
     console.log("AUDIT ALREADY EXISTS:", auditStore.currentAudit)
   }
+  
+  // Si on continue un audit, restaurer les réponses existantes dans l'audit store
+  if (questionnaireId && currentQuestionnaire.value?.user_responses) {
+    console.log("RESTORING EXISTING ANSWERS")
+    const userResponses = currentQuestionnaire.value.user_responses
+    const userComments = currentQuestionnaire.value.user_comments || {}
+    
+    // Parcourir toutes les questions et restaurer les réponses
+    for (const [questionId, answer] of Object.entries(userResponses)) {
+      const comment = userComments[questionId]
+      auditStore.answerQuestion(questionId, answer, comment || undefined)
+    }
+    
+    console.log("RESTORED ANSWERS COUNT:", Object.keys(userResponses).length)
+  }
+  
+  // Nettoyer les réponses qui n'appartiennent pas à ce questionnaire
+  if (currentQuestionnaire.value?.questions) {
+    const validQuestionIds = currentQuestionnaire.value.questions.map(q => q.id)
+    auditStore.filterValidAnswers(validQuestionIds)
+    console.log("FILTERED ANSWERS FOR VALID QUESTIONS:", validQuestionIds.length)
+  }
+  
+  // Démarrer la surveillance de la connectivité
+  startConnectivityMonitoring()
   
   isInitialized.value = true
   loadExistingAnswer()
@@ -138,6 +203,54 @@ const resetAnswers = () => {
   showNotes.value = false
 }
 
+const handleIDontKnow = () => {
+  textAnswer.value = 'Je ne sais pas'
+}
+
+// Gérer la soumission finale avec synchronisation
+const handleFinalSubmission = async () => {
+  console.log("HANDLE FINAL SUBMISSION CALLED")
+  
+  if (!currentQuestion.value || !isAnswerValid()) {
+    console.log("INVALID ANSWER - CANNOT PROCEED")
+    return
+  }
+
+  // Sauvegarder la dernière réponse
+  if (!(await saveCurrentAnswer())) {
+    return
+  }
+
+  try {
+    // Soumission finale via le store amélioré
+    const result = await auditStore.submitFinalAudit()
+    
+    console.log("FINAL SUBMISSION SUCCESS:", result)
+    
+    // Rediriger vers les résultats
+    router.push({
+      name: 'Results',
+      query: {
+        questionnaire_id: result.questionnaire_id
+      }
+    })
+    
+  } catch (error) {
+    console.error("FINAL SUBMISSION FAILED:", error)
+    
+    // Mode dégradé : sauvegarder localement et rediriger quand même
+    console.log("📱 Mode dégradé: Sauvegarde locale uniquement")
+    auditStore.completeAudit()
+    
+    router.push({
+      name: 'Results',
+      query: {
+        questionnaire_id: currentQuestionnaire.value?.id
+      }
+    })
+  }
+}
+
 const loadExistingAnswer = () => {
   if (!currentQuestionnaire.value || !currentQuestion.value) {
     resetAnswers()
@@ -175,8 +288,116 @@ watch(currentQuestionIndex, () => {
 // Suppression des fonctions de gestion spécifiques aux types
 // Maintenant tout est géré via les options dynamiques ou le textarea pour les qualitatives
 
-const handleIDontKnow = () => {
-  textAnswer.value = 'Je ne sais pas'
+// Surveillance de la connectivité
+const startConnectivityMonitoring = () => {
+  const checkInterval = setInterval(async () => {
+    const wasOnline = isOnline.value
+    isOnline.value = await auditStore.checkConnectivity()
+    
+    if (!wasOnline && isOnline.value) {
+      showSyncStatus.value = true
+      syncMessage.value = '🌐 Retour en ligne - Synchronisation en cours...'
+      
+      // Tenter une synchronisation
+      try {
+        await auditStore.syncWithBackend()
+        syncMessage.value = '✅ Synchronisation réussie'
+        setTimeout(() => {
+          showSyncStatus.value = false
+        }, 3000)
+      } catch (error) {
+        syncMessage.value = '❌ Erreur de synchronisation'
+        setTimeout(() => {
+          showSyncStatus.value = false
+        }, 3000)
+      }
+    } else if (wasOnline && !isOnline.value) {
+      showSyncStatus.value = true
+      syncMessage.value = '📵 Mode dégradé - Hors ligne'
+      setTimeout(() => {
+        showSyncStatus.value = false
+      }, 3000)
+    }
+  }, 10000) // Vérifier toutes les 10 secondes
+  
+  // Nettoyer l'intervalle quand le composant est détruit
+  onUnmounted(() => {
+    clearInterval(checkInterval)
+  })
+}
+
+// Mode dégradé : charger depuis localStorage
+const loadQuestionnaireFromLocalStorage = async (questionnaireId: string): Promise<boolean> => {
+  try {
+    const sessions = auditStore.getAllSessions()
+    const session = sessions[questionnaireId]
+    
+    if (session && session.answers.length > 0) {
+      console.log("📱 Mode dégradé: Chargement depuis localStorage")
+      
+      // Démarrer l'audit avec les données locales
+      auditStore.startAudit(questionnaireId)
+      
+      // Restaurer les réponses
+      for (const answer of session.answers) {
+        await auditStore.answerQuestion(answer.questionId, answer.answer, answer.notes, false) // Pas de sync auto
+      }
+      
+      showSyncStatus.value = true
+      syncMessage.value = '📱 Mode dégradé - Données locales chargées'
+      setTimeout(() => {
+        showSyncStatus.value = false
+      }, 5000)
+      
+      return true
+    }
+  } catch (error) {
+    console.error("Erreur lors du chargement depuis localStorage:", error)
+  }
+  
+  return false
+}
+
+// Synchroniser les réponses locales avec le backend
+const syncLocalAnswersWithBackend = async (questionnaireId: string) => {
+  try {
+    // Récupérer les réponses depuis localStorage
+    const sessions = auditStore.getAllSessions()
+    const localSession = sessions[questionnaireId]
+    
+    if (localSession && localSession.answers.length > 0) {
+      console.log(`🔄 Synchronisation de ${localSession.answers.length} réponses locales...`)
+      
+      // Démarrer l'audit
+      auditStore.startAudit(questionnaireId)
+      
+      // Restaurer les réponses dans le store
+      for (const answer of localSession.answers) {
+        await auditStore.answerQuestion(answer.questionId, answer.answer, answer.notes, false)
+      }
+      
+      // Forcer la synchronisation avec le backend
+      if (isOnline.value) {
+        const result = await auditStore.forceSync()
+        
+        if (result.success) {
+          showSyncStatus.value = true
+          syncMessage.value = `✅ ${result.synced_answers} réponses synchronisées`
+          setTimeout(() => {
+            showSyncStatus.value = false
+          }, 3000)
+        } else {
+          showSyncStatus.value = true
+          syncMessage.value = `⚠️ Synchronisation partielle: ${result.synced_answers}/${result.synced_answers + result.failed_answers}`
+          setTimeout(() => {
+            showSyncStatus.value = false
+          }, 5000)
+        }
+      }
+    }
+  } catch (error) {
+    console.error("Erreur lors de la synchronisation locale:", error)
+  }
 }
 
 // Fonction pour soumettre les réponses à l'API
@@ -227,7 +448,7 @@ const isAnswerValid = (): boolean => {
   return selectedValue.value !== null
 }
 
-const saveCurrentAnswer = () => {
+const saveCurrentAnswer = async () => {
   if (!currentQuestion.value) {
     console.log("NO CURRENT QUESTION - CANNOT SAVE")
     return false
@@ -240,7 +461,8 @@ const saveCurrentAnswer = () => {
     notes: notes.value
   })
 
-  auditStore.answerQuestion(currentQuestion.value.id, answerValue, notes.value)
+  // Utiliser le store amélioré SANS synchronisation automatique
+  await auditStore.answerQuestion(currentQuestion.value.id, answerValue, notes.value, false)
   
   // Debug du store après sauvegarde
   console.log("STORE ANSWERS AFTER SAVE:", auditStore.currentAudit?.answers)
@@ -248,7 +470,7 @@ const saveCurrentAnswer = () => {
   return true
 }
 
-const handleNext = () => {
+const handleNext = async () => {
   console.log("HANDLE NEXT CALLED")
   
   if (!currentQuestion.value || !isAnswerValid()) {
@@ -257,7 +479,7 @@ const handleNext = () => {
   }
 
   // Sauvegarder la réponse actuelle
-  if (!saveCurrentAnswer()) {
+  if (!(await saveCurrentAnswer())) {
     return
   }
 
@@ -279,65 +501,17 @@ const handleNext = () => {
       return
     }
 
-    // Debug du store avant construction du payload
-    console.log("FINAL ANSWERS:", auditStore.currentAudit?.answers)
-    
-    // Transformer les réponses pour l'API
-    const reponses = auditStore.currentAudit?.answers?.map(a => {
-      const r: any = {
-        question_id: a.questionId,
-        valeur: a.answer
-      }
-
-      if (a.notes && a.notes.trim() !== "") {
-        r.commentaire = a.notes
-      }
-
-      return r
-    }) || []
-
-    const payload = {
-      questionnaire_id: questionnaireStore.currentQuestionnaire?.id || '',
-      user_id: authStore.user?.id || '',  // ← AJOUT CRUCIAL
-      reponses
-    }
-
-    console.log("===== PAYLOAD SUBMIT ANSWERS =====")
-    console.log(JSON.stringify(payload, null, 2))
-    console.log("NOMBRE DE RÉPONSES:", reponses.length)
-
-    // Soumettre les réponses à l'API
-    submitAnswers(payload)
-      .then(() => {
-        console.log("ANSWERS SUBMITTED SUCCESSFULLY")
-        auditStore.completeAudit()
-        router.push({
-          name: 'Results',
-          query: {
-            questionnaire_id: payload.questionnaire_id
-          }
-        })
-      })
-      .catch((error) => {
-        console.error("FAILED TO SUBMIT ANSWERS:", error)
-        // Même en cas d'erreur, on continue vers les résultats
-        auditStore.completeAudit()
-        router.push({
-          name: 'Results',
-          query: {
-            questionnaire_id: payload.questionnaire_id
-          }
-        })
-      })
+    // Utiliser la nouvelle méthode de soumission finale
+    await handleFinalSubmission()
   }
 }
 
-const handlePrevious = () => {
+const handlePrevious = async () => {
   console.log("HANDLE PREVIOUS CALLED")
   
   // Sauvegarder la réponse actuelle avant de reculer
   if (currentQuestion.value && isAnswerValid()) {
-    saveCurrentAnswer()
+    await saveCurrentAnswer()
   }
   
   if (currentQuestionIndex.value > 0) {
@@ -345,15 +519,77 @@ const handlePrevious = () => {
   }
 }
 
-const handleSaveAndExit = () => {
+const handleSaveAndExit = async () => {
   console.log("HANDLE SAVE AND EXIT CALLED")
   
   // Sauvegarder la réponse actuelle
   if (currentQuestion.value && isAnswerValid()) {
-    saveCurrentAnswer()
+    await saveCurrentAnswer()
   }
   
-  router.push('/dashboard')
+  // Forcer la synchronisation avec le backend en utilisant saveAndExit
+  if (auditStore.currentAudit && currentQuestionnaire.value) {
+    try {
+      showSyncStatus.value = true
+      syncMessage.value = '⏳ Sauvegarde et sortie en cours...'
+      
+      // Utiliser questionnaireAPI.saveAndExit avec le flag is_user_exiting
+      // Convertir les réponses locales au format backend (question_id, valeur)
+      const formattedResponses = auditStore.currentAudit.answers.map(answer => ({
+        question_id: answer.questionId,
+        valeur: answer.answer,
+        commentaire: answer.notes || ''
+      }))
+      
+      const submission = {
+        questionnaire_id: currentQuestionnaire.value.id,
+        reponses: formattedResponses,
+        is_user_exiting: true,
+        is_final_submission: false
+      }
+      
+      const result = await questionnaireAPI.saveAndExit(submission)
+      
+      if (result.data) {
+        syncMessage.value = '✅ Sauvegardé et quitté avec succès'
+        setTimeout(() => {
+          showSyncStatus.value = false
+          router.push('/my-audits')
+        }, 2000)
+      } else {
+        syncMessage.value = '⚠️ Sauvegarde locale uniquement'
+        setTimeout(() => {
+          showSyncStatus.value = false
+          router.push('/my-audits')
+        }, 3000)
+      }
+    } catch (error) {
+      console.error('Erreur lors de la sauvegarde et sortie:', error)
+      syncMessage.value = '💾 Sauvegardé localement uniquement'
+      setTimeout(() => {
+        showSyncStatus.value = false
+        router.push('/my-audits')
+      }, 2000)
+    }
+  } else {
+    // Pas de réponses mais on doit quand même marquer comme SAVED
+    if (currentQuestionnaire.value) {
+      try {
+        const submission = {
+          questionnaire_id: currentQuestionnaire.value.id,
+          reponses: [],  // Pas de réponses
+          is_user_exiting: true,
+          is_final_submission: false
+        }
+        
+        await questionnaireAPI.saveAndExit(submission)
+        console.log('✅ Questionnaire marqué comme SAVED sans réponses')
+      } catch (error) {
+        console.error('Erreur lors du marquage SAVED:', error)
+      }
+    }
+    router.push('/my-audits')
+  }
 }
 
 // Suppression des options statiques - tout vient de l'API
@@ -409,6 +645,42 @@ const handleSaveAndExit = () => {
               class="absolute inset-y-0 left-0 bg-gradient-to-r from-cyan-500 to-blue-600 transition-all duration-300"
               :style="{ width: `${progress}%` }"
             />
+          </div>
+
+          <!-- Sync Status Indicator -->
+          <Transition
+            enter-active-class="transition duration-300 ease-out"
+            enter-from-class="opacity-0 translate-y-2"
+            enter-to-class="opacity-100 translate-y-0"
+            leave-active-class="transition duration-300 ease-in"
+            leave-from-class="opacity-100 translate-y-0"
+            leave-to-class="opacity-0 -translate-y-2"
+          >
+            <div v-if="showSyncStatus" class="mt-3 flex items-center gap-2 text-sm">
+              <div class="flex items-center gap-2 px-3 py-2 rounded-lg" :class="{
+                'bg-green-500/20 text-green-400 border border-green-500/30': syncMessage.includes('✅') || syncMessage.includes('🌐'),
+                'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30': syncMessage.includes('⚠️') || syncMessage.includes('⏳'),
+                'bg-red-500/20 text-red-400 border border-red-500/30': syncMessage.includes('❌') || syncMessage.includes('📵'),
+                'bg-blue-500/20 text-blue-400 border border-blue-500/30': syncMessage.includes('📱')
+              }">
+                <Loader2 v-if="syncMessage.includes('⏳')" class="w-4 h-4 animate-spin" />
+                <span>{{ syncMessage }}</span>
+              </div>
+            </div>
+          </Transition>
+
+          <!-- Connectivity Status -->
+          <div class="mt-2 flex items-center gap-2">
+            <div class="w-2 h-2 rounded-full" :class="isOnline ? 'bg-green-500' : 'bg-red-500'"></div>
+            <span class="text-xs text-slate-500">
+              {{ isOnline ? 'En ligne' : 'Hors ligne' }}
+            </span>
+            <span v-if="auditStore.lastSyncTime" class="text-xs text-slate-500">
+              • Dernière sync: {{ new Date(auditStore.lastSyncTime).toLocaleTimeString() }}
+            </span>
+            <span v-if="auditStore.pendingSync" class="text-xs text-yellow-500">
+              • Synchronisation...
+            </span>
           </div>
 
           <!-- Referential Badge -->

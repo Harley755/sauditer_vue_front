@@ -180,12 +180,15 @@ const stats = [
               <FileText class="w-7 h-7 text-white" />
             </div>
           </div>
-          <h3 class="text-white text-2xl mb-2 font-bold">Rapports</h3>
-          <p class="text-slate-400 text-sm">
-            Consultez et exportez vos rapports d'audit
+          <h3 class="text-white text-2xl mb-2 font-bold">Mes audits</h3>
+          <p class="text-slate-400 text-sm mb-4">
+            Consultez vos audits en cours et terminés
           </p>
-          <button class="mt-4 text-cyan-400 text-sm hover:text-cyan-300 transition-colors font-medium">
-            Voir les rapports →
+          <button 
+            @click="router.push('/my-audits')"
+            class="text-cyan-400 text-sm hover:text-cyan-300 transition-colors font-medium"
+          >
+            Voir mes audits →
           </button>
         </div>
       </div>
